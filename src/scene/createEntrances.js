@@ -18,6 +18,7 @@ function createEntranceMarker(entrance) {
 
   marker.userData = {
     type: 'entrance',
+    layer: 'buildings',
     id: entrance.id,
     buildingId: entrance.buildingId,
     name: entrance.name,
@@ -59,15 +60,16 @@ function createEntranceLabel(entrance) {
   const sprite = new THREE.Sprite(material);
 
   sprite.position.set(
-    entrance.position.x,
-    13,
-    entrance.position.z
+    0,
+    9.5,
+    0
   );
 
   sprite.scale.set(24, 8, 1);
 
   sprite.userData = {
     type: 'entrance-label',
+    layer: 'buildings',
     id: `${entrance.id}_LABEL`,
     name: entrance.name
   };
@@ -82,8 +84,8 @@ export function createEntrances(scene, entrances) {
     const marker = createEntranceMarker(entrance);
     const label = createEntranceLabel(entrance);
 
+    marker.add(label);
     scene.add(marker);
-    scene.add(label);
 
     entranceMeshes[entrance.id] = marker;
   });

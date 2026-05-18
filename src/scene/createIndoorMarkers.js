@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-function createRoomMarker(roomNode) {
+function createRoomMarker(room, roomNode) {
   const geometry = new THREE.CylinderGeometry(2.5, 2.5, 0.4, 24);
   const material = new THREE.MeshBasicMaterial({
     color: 0x2196f3
@@ -14,14 +14,17 @@ function createRoomMarker(roomNode) {
 
   marker.userData = {
     type: 'indoor-room-marker',
-    id: roomNode.id,
-    name: roomNode.label
+    layer: `${room.buildingId.toLowerCase()}-indoor`,
+    buildingId: room.buildingId,
+    roomId: room.id,
+    id: `${room.id}_MARKER`,
+    name: roomNode.label || room.name
   };
 
   return marker;
 }
 
-function createRoomLabel(roomNode) {
+function createRoomLabel(room, roomNode) {
   const canvas = document.createElement('canvas');
   canvas.width = 384;
   canvas.height = 128;
@@ -34,7 +37,7 @@ function createRoomLabel(roomNode) {
   context.fillStyle = '#2196f3';
   context.font = 'bold 38px Arial';
   context.textAlign = 'center';
-  context.fillText(roomNode.label, canvas.width / 2, 78);
+  context.fillText(roomNode.label || room.name, canvas.width / 2, 78);
 
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.SpriteMaterial({
@@ -49,26 +52,34 @@ function createRoomLabel(roomNode) {
   sprite.position.set(roomNode.x, y, roomNode.z);
   sprite.scale.set(18, 6, 1);
 
+  sprite.userData = {
+    type: 'indoor-room-label',
+    layer: `${room.buildingId.toLowerCase()}-indoor`,
+    buildingId: room.buildingId,
+    roomId: room.id,
+    id: `${room.id}_LABEL`,
+    name: roomNode.label || room.name
+  };
+
   return sprite;
 }
 
-export function createIndoorMarkers(scene, indoorGraph) {
+export function createRoomMarkers(scene, rooms, indoorGraphs) {
   const markerMeshes = [];
 
-  Object.entries(indoorGraph.nodes).forEach(([nodeId, node]) => {
-    if (!nodeId.startsWith('PER21_C')) return;
+  rooms.forEach((room) => {
+    const indoorGraph = indoorGraphs[room.buildingId];
+    const node = indoorGraph?.nodes?.[room.indoorNodeId];
+
+    if (!node) return;
 
     const roomNode = {
-      id: nodeId,
+      id: room.indoorNodeId,
       ...node
     };
 
-    const marker = createRoomMarker(roomNode);
-    const label = createRoomLabel(roomNode);
-
-    marker.userData.layer = 'per21-indoor';
-    label.userData.layer = 'per21-indoor';
-
+    const marker = createRoomMarker(room, roomNode);
+    const label = createRoomLabel(room, roomNode);
     scene.add(marker);
     scene.add(label);
 

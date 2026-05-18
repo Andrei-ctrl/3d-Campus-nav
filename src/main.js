@@ -1,35 +1,44 @@
 import * as THREE from 'three';
 
 import { isARSupported, startARSession } from './ar/arSession.js';
-import { renderARRoute, clearARRoute } from './ar/arRouteRenderer.js';
+import { renderARRoute, clearARRoute, setARRouteVisible } from './ar/arRouteRenderer.js';
 import { convertRouteToAnchorRelative } from './ar/arRouteAdapter.js';
 import { anchors } from './data/anchors.js';
 
-import { createIndoorMarkers } from './scene/createIndoorMarkers.js';
+import { createRoomMarkers } from './scene/createIndoorMarkers.js';
 import { per21IndoorGraph } from './data/per21IndoorGraph.js';
+import { per17IndoorGraph } from './data/per17IndoorGraph.js';
+import { per22IndoorGraph } from './data/per22IndoorGraph.js';
 import { createPer21IndoorStructure } from './scene/createPer21IndoorStructure.js';
+import { createPer17IndoorStructure } from './scene/createPer17IndoorStructure.js';
+import { createPer22IndoorStructure } from './scene/createPer22IndoorStructure.js';
 import {
   renderIndoorRoute,
-  clearIndoorRoute
+  clearIndoorRoute,
+  setIndoorRouteVisible,
+  setIndoorRouteBuildingVisible
 } from './navigation/indoorRouteRenderer.js';
 
+import { rooms } from './data/rooms.js';
 import { destinations } from './data/destinations.js';
 import { pedestrianPaths } from './data/pedestrianPaths.js';
 import { createPedestrianPaths } from './scene/createPedestrianPaths.js';
 import { graph } from './data/graph.js';
 import { findShortestPath } from './navigation/dijkstra.js';
 
-import { parseNavigationCommand } from './llm/commandParser.js';
+import { resolveNavigationCommand } from './llm/navigationAgent.js';
 
 import {
   renderRoute,
   clearRoute,
+  setRouteVisible,
   calculateRouteDistance
 } from './navigation/routeRenderer.js';
 
 
 
 import { createRouteControls } from './ui/controls.js';
+import { makeWidgetDraggable, setupWidget } from './ui/widgets.js';
 
 import {
   createScene,
@@ -70,23 +79,75 @@ const ground = createGround(scene);
 const buildingMeshes = createCampusBuildings(scene, buildings);
 const entranceMeshes = createEntrances(scene, entrances);
 
-//create indoor markers for PER21
-const indoorStructureMeshes = createPer21IndoorStructure(scene);
-const indoorMarkerMeshes = createIndoorMarkers(scene, per21IndoorGraph);
+const indoorGraphs = {
+  PER21: per21IndoorGraph,
+  PER22: per22IndoorGraph,
+  PER17: per17IndoorGraph
+};
+
+// Create indoor markers and structure layers.
+const per21IndoorStructureMeshes = createPer21IndoorStructure(scene);
+const per22IndoorStructureMeshes = createPer22IndoorStructure(scene);
+const per17IndoorStructureMeshes = createPer17IndoorStructure(scene);
+const indoorMarkerMeshes = createRoomMarkers(scene, rooms, indoorGraphs);
 
 const per21IndoorMeshes = [
-  ...indoorStructureMeshes,
-  ...indoorMarkerMeshes
+  ...per21IndoorStructureMeshes,
+  ...indoorMarkerMeshes.filter((mesh) => mesh.userData.buildingId === 'PER21')
+];
+
+const per17IndoorMeshes = [
+  ...per17IndoorStructureMeshes,
+  ...indoorMarkerMeshes.filter((mesh) => mesh.userData.buildingId === 'PER17')
+];
+
+const per22IndoorMeshes = [
+  ...per22IndoorStructureMeshes,
+  ...indoorMarkerMeshes.filter((mesh) => mesh.userData.buildingId === 'PER22')
 ];
 
 let isIndoorLayerVisible = true;
+let isPer22IndoorLayerVisible = true;
+let isPer17IndoorLayerVisible = true;
+let areBuildingsVisible = true;
+let areRoutesVisible = true;
+let areBuildingsTransparent = false;
 let latestOutdoorPath = [];
 let latestAnchor = null;
 let arDebugCube = null;
 
+const defaultARCalibration = {
+  scale: 0.05,
+  x: 0,
+  y: -0.45,
+  z: -1.5,
+  mode: 'anchor-relative'
+};
 
-function applyAnchorRelativeCampusTransform(anchor, scale = 0.05) {
+let arCalibration = loadARCalibration();
+
+function loadARCalibration() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('arCalibration') || '{}');
+
+    return {
+      ...defaultARCalibration,
+      ...saved
+    };
+  } catch (error) {
+    console.warn('Could not load AR calibration:', error);
+    return { ...defaultARCalibration };
+  }
+}
+
+function saveARCalibration() {
+  localStorage.setItem('arCalibration', JSON.stringify(arCalibration));
+}
+
+function applyAnchorRelativeCampusTransform(anchor, calibration = arCalibration) {
   if (!anchor) return;
+
+  const scale = calibration.scale;
 
   campusARObjects.forEach((object) => {
     if (!object) return;
@@ -96,9 +157,9 @@ function applyAnchorRelativeCampusTransform(anchor, scale = 0.05) {
     if (!original) return;
 
     object.position.set(
-      (original.position.x - anchor.position.x) * scale,
-      original.position.y * scale,
-      -1.5 - (original.position.z - anchor.position.z) * scale
+      calibration.x + (original.position.x - anchor.position.x) * scale,
+      calibration.y + original.position.y * scale,
+      calibration.z - (original.position.z - anchor.position.z) * scale
     );
 
     object.scale.set(
@@ -157,6 +218,61 @@ function setIndoorLayerVisible(visible) {
   per21IndoorMeshes.forEach((mesh) => {
     mesh.visible = visible;
   });
+
+  setIndoorRouteBuildingVisible('PER21', visible);
+}
+
+function setPer17IndoorLayerVisible(visible) {
+  isPer17IndoorLayerVisible = visible;
+
+  per17IndoorMeshes.forEach((mesh) => {
+    mesh.visible = visible;
+  });
+
+  setIndoorRouteBuildingVisible('PER17', visible);
+}
+
+function setPer22IndoorLayerVisible(visible) {
+  isPer22IndoorLayerVisible = visible;
+
+  per22IndoorMeshes.forEach((mesh) => {
+    mesh.visible = visible;
+  });
+
+  setIndoorRouteBuildingVisible('PER22', visible);
+}
+
+function setBuildingLayerVisible(visible) {
+  areBuildingsVisible = visible;
+
+  Object.values(buildingMeshes).forEach((mesh) => {
+    mesh.visible = visible;
+  });
+
+  Object.values(entranceMeshes).forEach((mesh) => {
+    mesh.visible = visible;
+  });
+}
+
+function setBuildingTransparency(enabled) {
+  areBuildingsTransparent = enabled;
+
+  Object.values(buildingMeshes).forEach((mesh) => {
+    if (!mesh.material) return;
+
+    mesh.material.transparent = enabled;
+    mesh.material.opacity = enabled ? 0.24 : 1;
+    mesh.material.depthWrite = !enabled;
+    mesh.material.needsUpdate = true;
+  });
+}
+
+function setRouteLayerVisible(visible) {
+  areRoutesVisible = visible;
+
+  setRouteVisible(visible);
+  setIndoorRouteVisible(visible);
+  setARRouteVisible(visible);
 }
 
 // Create roads
@@ -168,7 +284,9 @@ const pedestrianPathMeshes = createPedestrianPaths(scene, pedestrianPaths);
 const campusARObjects = [
   ...Object.values(buildingMeshes),
   ...Object.values(entranceMeshes),
-  ...indoorStructureMeshes,
+  ...per21IndoorStructureMeshes,
+  ...per22IndoorStructureMeshes,
+  ...per17IndoorStructureMeshes,
   ...indoorMarkerMeshes,
   mainRoad,
   mensaPer17Road,
@@ -216,7 +334,7 @@ createRouteControls(
 
     if (!fromEntranceId) return;
 
-    const result = parseNavigationCommand(commandText, destinations, null);
+    const result = resolveNavigationCommand(commandText, destinations);
 
     if (!result.success) {
       alert(result.error);
@@ -253,6 +371,44 @@ function getDefaultEntranceId(destinationId) {
   return destination.defaultEntranceId;
 }
 
+function getIndoorGraphForDestination(destination) {
+  const buildingId = destination?.room?.buildingId;
+
+  return buildingId ? indoorGraphs[buildingId] : null;
+}
+
+function renderDestinationIndoorRoute(destination) {
+  if (destination?.type !== 'room') {
+    return {
+      path: [],
+      note: ''
+    };
+  }
+
+  const indoorGraph = getIndoorGraphForDestination(destination);
+  const buildingId = destination.room.buildingId;
+
+  if (!indoorGraph) {
+    return {
+      path: [],
+      note: 'Indoor graph not available.'
+    };
+  }
+
+  const indoorPath = findShortestPath(
+    indoorGraph,
+    destination.room.nearestEntranceId,
+    destination.room.indoorNodeId
+  );
+
+  renderIndoorRoute(scene, indoorGraph, indoorPath, { buildingId });
+
+  return {
+    path: indoorPath,
+    note: ''
+  };
+}
+
 function showRoute(fromDestinationId, toDestinationId) {
   const fromDestination = destinations.find((item) => item.id === fromDestinationId);
   const toDestination = destinations.find((item) => item.id === toDestinationId);
@@ -265,29 +421,33 @@ function showRoute(fromDestinationId, toDestinationId) {
   clearRoute(scene);
   clearIndoorRoute(scene);
 
-  const fromIsPer21Room =
-    fromDestination.type === "room" &&
-    fromDestination.room?.buildingId === "PER21";
+  const fromIsRoom = fromDestination.type === 'room';
+  const toIsRoom = toDestination.type === 'room';
+  const sameIndoorBuilding =
+    fromIsRoom &&
+    toIsRoom &&
+    fromDestination.room.buildingId === toDestination.room.buildingId;
 
-  const toIsPer21Room =
-    toDestination.type === "room" &&
-    toDestination.room?.buildingId === "PER21";
+  // Same-building room routes stay fully indoors.
+  if (sameIndoorBuilding) {
+    const indoorGraph = getIndoorGraphForDestination(toDestination);
 
-  // CASE 1: PER21 room → PER21 room
-  // No outdoor route needed. Use indoor graph only.
-  if (fromIsPer21Room && toIsPer21Room) {
-    const indoorStartId = fromDestination.room.indoorNodeId;
-    const indoorEndId = toDestination.room.indoorNodeId;
+    if (!indoorGraph) {
+      displayRouteInfo([], 0, fromDestination, toDestination, [], 'Indoor graph not available.');
+      return;
+    }
 
     const indoorPath = findShortestPath(
-      per21IndoorGraph,
-      indoorStartId,
-      indoorEndId
+      indoorGraph,
+      fromDestination.room.indoorNodeId,
+      toDestination.room.indoorNodeId
     );
 
     console.log("Indoor room-to-room route:", indoorPath);
 
-    renderIndoorRoute(scene, per21IndoorGraph, indoorPath);
+    renderIndoorRoute(scene, indoorGraph, indoorPath, {
+      buildingId: toDestination.room.buildingId
+    });
 
     displayRouteInfo(
       [],
@@ -300,7 +460,8 @@ function showRoute(fromDestinationId, toDestinationId) {
     return;
   }
 
-  // CASE 2: outdoor route to a building or room entrance
+  // TODO: Add full room -> source indoor exit -> outdoor -> destination indoor routing.
+  // For now, different-building room routes start outdoors at the source nearest entrance.
   const fromId = getDefaultEntranceId(fromDestinationId);
   const toId = getDefaultEntranceId(toDestinationId);
 
@@ -311,31 +472,15 @@ function showRoute(fromDestinationId, toDestinationId) {
 
   renderRoute(scene, graph, path);
 
-  // CASE 3: destination is a PER21 room
-  // Outdoor route goes to PER21 entrance, then indoor route goes to room.
-  let indoorPath = [];
-
-  if (toIsPer21Room) {
-    const indoorStartId = toDestination.room.nearestEntranceId;
-    const indoorEndId = toDestination.room.indoorNodeId;
-
-    indoorPath = findShortestPath(
-      per21IndoorGraph,
-      indoorStartId,
-      indoorEndId
-    );
-
-    console.log("Indoor route:", indoorPath);
-
-    renderIndoorRoute(scene, per21IndoorGraph, indoorPath);
-  }
+  const indoorRoute = renderDestinationIndoorRoute(toDestination);
 
   displayRouteInfo(
     path,
     distance,
     fromDestination,
     toDestination,
-    indoorPath
+    indoorRoute.path,
+    indoorRoute.note
   );
 }
 
@@ -356,10 +501,6 @@ function showRouteFromEntrance(fromEntranceId, toDestinationId) {
 
   clearRoute(scene);
   clearIndoorRoute(scene);
-
-  const toIsPer21Room =
-    toDestination.type === 'room' &&
-    toDestination.room?.buildingId === 'PER21';
 
   const toId = getDefaultEntranceId(toDestinationId);
 
@@ -390,27 +531,15 @@ function showRouteFromEntrance(fromEntranceId, toDestinationId) {
 
   renderRoute(scene, graph, path);
 
-  let indoorPath = [];
-
-  if (toIsPer21Room) {
-    const indoorStartId = toDestination.room.nearestEntranceId;
-    const indoorEndId = toDestination.room.indoorNodeId;
-
-    indoorPath = findShortestPath(
-      per21IndoorGraph,
-      indoorStartId,
-      indoorEndId
-    );
-
-    renderIndoorRoute(scene, per21IndoorGraph, indoorPath);
-  }
+  const indoorRoute = renderDestinationIndoorRoute(toDestination);
 
   displayRouteInfo(
     path,
     distance,
     fromDestination,
     toDestination,
-    indoorPath
+    indoorRoute.path,
+    indoorRoute.note
   );
 }
 
@@ -492,7 +621,12 @@ function displayObjectInfo(object) {
   }
 
   const data = object.userData;
-  let html = `<h2>${data.id}</h2>`;
+  let html = `
+    <div class="selected-info-header">
+      <h2>${data.id}</h2>
+    </div>
+    <div class="selected-info-content">
+  `;
 
   if (data.type === 'building') {
     html += `<p><strong>Type:</strong> ${data.category || 'Building'}</p>`;
@@ -507,8 +641,14 @@ function displayObjectInfo(object) {
     html += `<p><strong>Description:</strong> ${data.description}</p>`;
   }
 
+  html += '</div>';
   panel.innerHTML = html;
   panel.style.display = 'block';
+
+  setupWidget(panel, {
+    header: panel.querySelector('.selected-info-header'),
+    content: panel.querySelector('.selected-info-content')
+  });
 }
 
 function hideObjectInfo() {
@@ -519,7 +659,7 @@ function hideObjectInfo() {
   }
 }
 
-function displayRouteInfo(path, distance, fromDestination, toDestination, indoorPath = []) {
+function displayRouteInfo(path, distance, fromDestination, toDestination, indoorPath = [], indoorNote = '') {
   let panel = document.getElementById('route-info');
 
   if (!panel) {
@@ -545,6 +685,8 @@ function displayRouteInfo(path, distance, fromDestination, toDestination, indoor
       <p><strong>Building:</strong> ${toDestination.room.buildingId}</p>
       <p><strong>Room:</strong> ${toDestination.room.name}</p>
       <p><strong>Floor:</strong> ${toDestination.room.floor}</p>
+      ${toDestination.room.capacity ? `<p><strong>Capacity:</strong> ${toDestination.room.capacity} places</p>` : ''}
+      <p><strong>Description:</strong> ${toDestination.room.description}</p>
     `;
   } else {
     destinationDetails = `
@@ -565,6 +707,7 @@ function displayRouteInfo(path, distance, fromDestination, toDestination, indoor
     <p><strong>Outdoor distance:</strong> ${distance.toFixed(1)} m</p>
 
     ${destinationDetails}
+    ${indoorNote ? `<p><strong>Note:</strong> ${indoorNote}</p>` : ''}
 
     <p><strong>Outdoor route steps:</strong></p>
     <ol>${outdoorSteps}</ol>
@@ -585,6 +728,7 @@ function displayRouteInfo(path, distance, fromDestination, toDestination, indoor
     minimizeButton.textContent = isCollapsed ? '+' : '−';
   });
 }
+  makeWidgetDraggable(panel, panel.querySelector('.route-info-header'));
 }
 
 function hideRouteInfo() {
@@ -596,6 +740,20 @@ function hideRouteInfo() {
 }
 
 async function createARButton() {
+  const container = document.createElement('div');
+  container.id = 'ar-start-widget';
+  container.className = 'ar-start-widget';
+
+  const header = document.createElement('div');
+  header.className = 'ar-start-header';
+
+  const title = document.createElement('h2');
+  title.textContent = 'AR';
+  header.appendChild(title);
+
+  const content = document.createElement('div');
+  content.className = 'ar-start-content';
+
   const button = document.createElement('button');
 
   button.id = 'ar-start-button';
@@ -625,7 +783,7 @@ async function createARButton() {
    // showARWorldDebugCube();
 
     enterARViewMode();
-    applyAnchorRelativeCampusTransform(latestAnchor, 0.05);
+    applyAnchorRelativeCampusTransform(latestAnchor, arCalibration);
 
    renderARRoute(
       scene,
@@ -633,9 +791,14 @@ async function createARButton() {
       latestOutdoorPath,
       latestAnchor.position,
       {
-        scale: 0.05,
-        cameraRelative: false,
-        originOffset: { x: 0, y: -0.45, z: -1.5 }
+        scale: arCalibration.scale,
+        camera,
+        cameraRelative: arCalibration.mode === 'camera-debug',
+        originOffset: {
+          x: arCalibration.x,
+          y: arCalibration.y,
+          z: arCalibration.z
+        }
       }
     );
 
@@ -652,31 +815,219 @@ async function createARButton() {
     button.textContent = 'Start AR';
   }
 });
-  document.getElementById('ui').appendChild(button);
+  content.appendChild(button);
+  container.appendChild(header);
+  container.appendChild(content);
+  document.getElementById('ui').appendChild(container);
+  setupWidget(container, {
+    header,
+    content
+  });
 }
 
-function createIndoorLayerCheckbox() {
+function createLayerToggles() {
   const container = document.createElement('div');
-  container.id = 'indoor-layer-control';
-  container.className = 'layer-checkbox-control';
+  container.id = 'layer-controls';
+  container.className = 'layer-controls';
 
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox';
-  checkbox.id = 'show-indoor-layer';
-  checkbox.checked = true;
+  const header = document.createElement('div');
+  header.className = 'layer-controls-header';
 
-  const label = document.createElement('label');
-  label.htmlFor = 'show-indoor-layer';
-  label.textContent = 'Show PER21 indoor layer';
+  const title = document.createElement('h2');
+  title.textContent = 'Layers';
+  header.appendChild(title);
 
-  checkbox.addEventListener('change', () => {
-    setIndoorLayerVisible(checkbox.checked);
+  const content = document.createElement('div');
+  content.className = 'layer-controls-content';
+
+  const createCheckbox = (id, text, checked, onChange) => {
+    const row = document.createElement('label');
+    row.className = 'layer-toggle';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = id;
+    checkbox.checked = checked;
+
+    const labelText = document.createElement('span');
+    labelText.textContent = text;
+
+    checkbox.addEventListener('change', () => {
+      onChange(checkbox.checked);
+    });
+
+    row.appendChild(checkbox);
+    row.appendChild(labelText);
+    content.appendChild(row);
+  };
+
+  createCheckbox('show-buildings-layer', 'Buildings + labels', areBuildingsVisible, setBuildingLayerVisible);
+  createCheckbox('transparent-buildings-layer', 'Transparent buildings', areBuildingsTransparent, setBuildingTransparency);
+  createCheckbox('show-routes-layer', 'Green/blue route lines', areRoutesVisible, setRouteLayerVisible);
+  createCheckbox('show-indoor-layer', 'PER21 interior objects', isIndoorLayerVisible, setIndoorLayerVisible);
+  createCheckbox('show-per22-indoor-layer', 'PER22 interior objects', isPer22IndoorLayerVisible, setPer22IndoorLayerVisible);
+  createCheckbox('show-per17-indoor-layer', 'PER17 interior objects', isPer17IndoorLayerVisible, setPer17IndoorLayerVisible);
+
+  container.appendChild(header);
+  container.appendChild(content);
+  document.getElementById('ui').appendChild(container);
+  setupWidget(container, {
+    header,
+    content
+  });
+}
+
+function createARCalibrationPanel() {
+  const container = document.createElement('div');
+  container.id = 'ar-calibration-panel';
+  container.className = 'ar-calibration-panel';
+
+  const header = document.createElement('div');
+  header.className = 'ar-calibration-header';
+
+  const title = document.createElement('h2');
+  title.textContent = 'AR Calibration';
+  header.appendChild(title);
+
+  const content = document.createElement('div');
+  content.className = 'ar-calibration-content';
+
+  const controls = {};
+
+  const modeLabel = document.createElement('label');
+  modeLabel.textContent = 'AR Mode';
+
+  const modeSelect = document.createElement('select');
+  modeSelect.id = 'ar-mode';
+
+  [
+    { value: 'camera-debug', text: 'Debug route in front of camera' },
+    { value: 'anchor-relative', text: 'Anchor-relative route' }
+  ].forEach((mode) => {
+    const option = document.createElement('option');
+    option.value = mode.value;
+    option.textContent = mode.text;
+    modeSelect.appendChild(option);
   });
 
-  container.appendChild(checkbox);
-  container.appendChild(label);
+  modeSelect.value = arCalibration.mode;
+  content.appendChild(modeLabel);
+  content.appendChild(modeSelect);
 
+  const addCalibrationControl = (key, label, min, max, step) => {
+    const row = document.createElement('div');
+    row.className = 'ar-calibration-row';
+
+    const controlLabel = document.createElement('label');
+    controlLabel.textContent = label;
+
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = min;
+    range.max = max;
+    range.step = step;
+    range.value = arCalibration[key];
+
+    const number = document.createElement('input');
+    number.type = 'number';
+    number.min = min;
+    number.max = max;
+    number.step = step;
+    number.value = arCalibration[key];
+
+    range.addEventListener('input', () => {
+      number.value = range.value;
+    });
+
+    number.addEventListener('input', () => {
+      range.value = number.value;
+    });
+
+    row.appendChild(controlLabel);
+    row.appendChild(range);
+    row.appendChild(number);
+    content.appendChild(row);
+
+    controls[key] = { range, number };
+  };
+
+  addCalibrationControl('scale', 'Scale', 0.005, 0.2, 0.005);
+  addCalibrationControl('x', 'X offset', -5, 5, 0.05);
+  addCalibrationControl('y', 'Y offset', -3, 3, 0.05);
+  addCalibrationControl('z', 'Z offset', -6, 2, 0.05);
+
+  const applyButton = document.createElement('button');
+  applyButton.textContent = 'Apply AR Calibration';
+
+  const resetButton = document.createElement('button');
+  resetButton.textContent = 'Reset Calibration';
+
+  const applyValues = () => {
+    arCalibration = {
+      scale: Number(controls.scale.number.value),
+      x: Number(controls.x.number.value),
+      y: Number(controls.y.number.value),
+      z: Number(controls.z.number.value),
+      mode: modeSelect.value
+    };
+
+    saveARCalibration();
+  };
+
+  applyButton.addEventListener('click', applyValues);
+
+  resetButton.addEventListener('click', () => {
+    arCalibration = { ...defaultARCalibration };
+    modeSelect.value = arCalibration.mode;
+
+    Object.entries(controls).forEach(([key, control]) => {
+      control.range.value = arCalibration[key];
+      control.number.value = arCalibration[key];
+    });
+
+    saveARCalibration();
+  });
+
+  content.appendChild(applyButton);
+  content.appendChild(resetButton);
+
+  container.appendChild(header);
+  container.appendChild(content);
   document.getElementById('ui').appendChild(container);
+  setupWidget(container, {
+    header,
+    content
+  });
+}
+
+function setupStaticInfoPanel() {
+  const panel = document.getElementById('info-panel');
+
+  if (!panel) return;
+
+  const title = panel.querySelector('h1');
+  const paragraphs = Array.from(panel.querySelectorAll('p'));
+
+  if (!title || paragraphs.length === 0) return;
+
+  const header = document.createElement('div');
+  header.className = 'info-panel-header';
+
+  const content = document.createElement('div');
+  content.className = 'info-panel-content';
+
+  header.appendChild(title);
+  paragraphs.forEach((paragraph) => {
+    content.appendChild(paragraph);
+  });
+
+  panel.appendChild(header);
+  panel.appendChild(content);
+
+  setupWidget(panel, {
+    header,
+    content
+  });
 }
 
 function enterARViewMode() {
@@ -702,7 +1053,9 @@ function exitARViewMode() {
   clearARRoute(scene);
 }
 
-createIndoorLayerCheckbox();
+setupStaticInfoPanel();
+createLayerToggles();
+createARCalibrationPanel();
 createARButton();
 // Animation loop
 function animate() {

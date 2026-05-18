@@ -60,6 +60,7 @@ function createBuildingMesh(building) {
 
   mesh.userData = {
     type: building.isBridge ? 'bridge' : 'building',
+    layer: 'buildings',
     category: building.type,
     id: building.id,
     name: building.name,
@@ -125,9 +126,13 @@ function addBuildingEdges(scene, buildingMesh) {
   const edgeGeometry = new THREE.EdgesGeometry(buildingMesh.geometry);
   const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x333333 });
   const line = new THREE.LineSegments(edgeGeometry, edgeMaterial);
-  line.position.copy(buildingMesh.position);
-  line.rotation.copy(buildingMesh.rotation);
-  scene.add(line);
+  line.userData = {
+    type: 'building-edges',
+    layer: 'buildings',
+    id: `${buildingMesh.userData.id}_EDGES`,
+    name: `${buildingMesh.userData.name} outline`
+  };
+  buildingMesh.add(line);
 }
 
 export function createCampusBuildings(scene, buildings) {
