@@ -314,6 +314,9 @@ function showRouteFromEntrance(fromEntranceId, toDestinationId) {
   latestOutdoorPath = path;
   latestAnchor = anchors.find((anchor) => anchor.entranceId === fromEntranceId) || null;
 
+  console.log('Latest outdoor path:', latestOutdoorPath);
+  console.log('Latest anchor:', latestAnchor);
+
   const selectedAnchor = anchors.find((anchor) => anchor.entranceId === fromEntranceId);
 
   if (selectedAnchor) {
@@ -552,35 +555,36 @@ async function createARButton() {
 
   button.addEventListener('click', async () => {
   try {
-    button.textContent = 'Starting AR...';
-
-    await startARSession(renderer);
-
-    showARWorldDebugCube();
-
-    if (!latestAnchor || latestOutdoorPath.length < 2) {
-      alert('Please select a current location and show a route before starting AR.');
+    if (!latestAnchor || !Array.isArray(latestOutdoorPath) || latestOutdoorPath.length < 2) {
+      alert('Please select a current location and click Show Route before starting AR.');
       button.textContent = 'Start AR';
       return;
     }
 
+    button.textContent = 'Starting AR...';
+
+    const session = await startARSession(renderer);
+
+    showARWorldDebugCube();
+
     enterARViewMode();
 
     renderARRoute(
-    scene,
-    graph,
-    latestOutdoorPath,
-    latestAnchor.position,
-    {
-      scale: 0.1,
-      cameraRelative: false,
-      originOffset: {
-        x: 0,
-        y: 0,
-        z: -1.5
+      scene,
+      graph,
+      latestOutdoorPath,
+      latestAnchor.position,
+      {
+        scale: 0.1,
+        camera,
+        cameraRelative: true
       }
-    }
-  );
+    );
+
+    session.addEventListener('end', () => {
+      exitARViewMode();
+      button.textContent = 'Start AR';
+    });
 
     button.textContent = 'AR Running';
   } catch (error) {
@@ -589,7 +593,6 @@ async function createARButton() {
     button.textContent = 'Start AR';
   }
 });
-
   document.getElementById('ui').appendChild(button);
 }
 
@@ -644,10 +647,9 @@ createIndoorLayerCheckbox();
 createARButton();
 // Animation loop
 function animate() {
-  requestAnimationFrame(animate);
-
   controls.update();
   renderer.render(scene, camera);
 }
 
-animate();
+renderer.setAnimationLoop(animate);
+
