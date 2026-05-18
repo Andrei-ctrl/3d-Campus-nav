@@ -1,4 +1,48 @@
+import * as THREE from 'three';
+import { convertRouteToAnchorRelative } from './arRouteAdapter.js';
+
 let currentARRouteGroup = null;
+
+
+function createCylinderBetweenPoints(start, end, radius, color) {
+  const startVector = new THREE.Vector3(start.x, start.y, start.z);
+  const endVector = new THREE.Vector3(end.x, end.y, end.z);
+
+  const direction = new THREE.Vector3().subVectors(endVector, startVector);
+  const length = direction.length();
+
+  const geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
+  const material = new THREE.MeshBasicMaterial({ color });
+
+  const cylinder = new THREE.Mesh(geometry, material);
+
+  const midpoint = new THREE.Vector3()
+    .addVectors(startVector, endVector)
+    .multiplyScalar(0.5);
+
+  cylinder.position.copy(midpoint);
+
+  const quaternion = new THREE.Quaternion();
+  quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    direction.clone().normalize()
+  );
+
+  cylinder.quaternion.copy(quaternion);
+
+  return cylinder;
+}
+
+function createPointMarker(point, color) {
+  const geometry = new THREE.SphereGeometry(0.15, 16, 16);
+  const material = new THREE.MeshBasicMaterial({ color });
+
+  const sphere = new THREE.Mesh(geometry, material);
+  sphere.position.set(point.x, point.y, point.z);
+
+  return sphere;
+}
+
 export function clearARRoute(scene) {
   if (!currentARRouteGroup) return;
 
@@ -40,9 +84,8 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
   let arPoints;
 
   if (cameraRelative) {
-    // DEBUG / prototype AR mode:
+    // Prototype AR mode:
     // Draw a compressed route directly in front of the phone camera.
-    // This makes the full route visible even indoors.
     arPoints = relativeRoute.map((point, index) => ({
       id: point.id,
       x: index * 0.35 - 0.4,
@@ -50,7 +93,7 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
       z: -1.3 - index * 0.25
     }));
   } else {
-    // Real anchor-relative mode:
+    // Anchor-relative mode:
     // Draw route according to campus coordinates.
     arPoints = relativeRoute.map((point) => ({
       id: point.id,
