@@ -64,7 +64,7 @@ const controls = createOrbitControls(camera, renderer);
 
 // Setup lighting and ground
 createLighting(scene);
-createGround(scene);
+const ground = createGround(scene);
 
 // Create campus objects
 const buildingMeshes = createCampusBuildings(scene, buildings);
@@ -515,6 +515,8 @@ async function createARButton() {
       return;
     }
 
+    enterARViewMode();
+
     renderARRoute(
       scene,
       graph,
@@ -558,6 +560,29 @@ function createIndoorLayerCheckbox() {
   container.appendChild(label);
 
   document.getElementById('ui').appendChild(container);
+}
+
+function enterARViewMode() {
+  // Hide only the large white ground plane
+  if (ground) {
+    ground.visible = false;
+  }
+
+  // Remove non-transparent desktop background/fog during AR
+  scene.background = null;
+  scene.fog = null;
+}
+
+function exitARViewMode() {
+  // Restore normal desktop view
+  if (ground) {
+    ground.visible = true;
+  }
+
+  scene.background = new THREE.Color(0xf7f7f4);
+  scene.fog = new THREE.Fog(0xf7f7f4, 360, 620);
+
+  clearARRoute(scene);
 }
 
 createIndoorLayerCheckbox();

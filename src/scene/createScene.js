@@ -26,7 +26,7 @@ export function createRenderer(canvas) {
 
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setClearColor(0xf7f7f4, 1);
+  renderer.setClearColor(0x000000, 0);
 
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
