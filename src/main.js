@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { isARSupported, startARSession } from './ar/arSession.js';
+import { renderARRoute, clearARRoute } from './ar/arRouteRenderer.js';
 import { convertRouteToAnchorRelative } from './ar/arRouteAdapter.js';
 import { anchors } from './data/anchors.js';
 
@@ -79,6 +80,8 @@ const per21IndoorMeshes = [
 ];
 
 let isIndoorLayerVisible = true;
+let latestOutdoorPath = [];
+let latestAnchor = null;
 
 function setIndoorLayerVisible(visible) {
   isIndoorLayerVisible = visible;
@@ -110,9 +113,13 @@ createRouteControls(
 
   // Clear Route button
   () => {
-    clearRoute(scene);
-    clearIndoorRoute(scene);
-    hideRouteInfo();
+  clearRoute(scene);
+  clearIndoorRoute(scene);
+  clearARRoute(scene);
+  hideRouteInfo();
+
+  latestOutdoorPath = [];
+  latestAnchor = null;
   },
 
   // Run Command button
@@ -272,6 +279,9 @@ function showRouteFromEntrance(fromEntranceId, toDestinationId) {
 
   const path = findShortestPath(graph, fromEntranceId, toId);
   const distance = calculateRouteDistance(graph, path);
+
+  latestOutdoorPath = path;
+  latestAnchor = anchors.find((anchor) => anchor.entranceId === fromEntranceId) || null;
 
   const selectedAnchor = anchors.find((anchor) => anchor.entranceId === fromEntranceId);
 
@@ -494,18 +504,34 @@ async function createARButton() {
   }
 
   button.addEventListener('click', async () => {
-    try {
-      button.textContent = 'Starting AR...';
+  try {
+    button.textContent = 'Starting AR...';
 
-      await startARSession(renderer);
+    await startARSession(renderer);
 
-      button.textContent = 'AR Running';
-    } catch (error) {
-      console.error(error);
-      alert(error.message);
+    if (!latestAnchor || latestOutdoorPath.length < 2) {
+      alert('Please select a current location and show a route before starting AR.');
       button.textContent = 'Start AR';
+      return;
     }
-  });
+
+    renderARRoute(
+      scene,
+      graph,
+      latestOutdoorPath,
+      latestAnchor.position,
+      {
+        scale: 0.05
+      }
+    );
+
+    button.textContent = 'AR Running';
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+    button.textContent = 'Start AR';
+  }
+});
 
   document.getElementById('ui').appendChild(button);
 }
