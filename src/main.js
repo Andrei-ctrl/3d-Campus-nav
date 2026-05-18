@@ -84,9 +84,14 @@ let latestOutdoorPath = [];
 let latestAnchor = null;
 let arDebugCube = null;
 
-function showARDebugCube() {
+let arDebugCube = null;
+
+function showARWorldDebugCube() {
   if (arDebugCube) {
-    camera.remove(arDebugCube);
+    if (arDebugCube.parent) {
+      arDebugCube.parent.remove(arDebugCube);
+    }
+
     arDebugCube.geometry.dispose();
     arDebugCube.material.dispose();
     arDebugCube = null;
@@ -99,19 +104,15 @@ function showARDebugCube() {
 
   arDebugCube = new THREE.Mesh(geometry, material);
 
-  // Attached to the camera:
+  // World-fixed object:
   // x = center
-  // y = slightly below center
-  // z = 1 meter in front of camera
-  arDebugCube.position.set(0, -0.25, -1);
+  // y = around chest / table height depending on local-floor
+  // z = 1.5 meters in front of where AR session starts
+  arDebugCube.position.set(0, 0.2, -1.5);
 
-  camera.add(arDebugCube);
+  scene.add(arDebugCube);
 
-  if (!scene.children.includes(camera)) {
-    scene.add(camera);
-  }
-
-  console.log('AR debug cube added in front of camera');
+  console.log('World-fixed AR debug cube added');
 }
 
 function setIndoorLayerVisible(visible) {
@@ -556,8 +557,8 @@ async function createARButton() {
 
     await startARSession(renderer);
 
-    showARDebugCube();
-    
+    showARWorldDebugCube();
+
     if (!latestAnchor || latestOutdoorPath.length < 2) {
       alert('Please select a current location and show a route before starting AR.');
       button.textContent = 'Start AR';
@@ -567,14 +568,20 @@ async function createARButton() {
     enterARViewMode();
 
     renderARRoute(
-      scene,
-      graph,
-      latestOutdoorPath,
-      latestAnchor.position,
-      {
-        scale: 0.1
+    scene,
+    graph,
+    latestOutdoorPath,
+    latestAnchor.position,
+    {
+      scale: 0.1,
+      cameraRelative: false,
+      originOffset: {
+        x: 0,
+        y: 0,
+        z: -1.5
       }
-    );
+    }
+  );
 
     button.textContent = 'AR Running';
   } catch (error) {

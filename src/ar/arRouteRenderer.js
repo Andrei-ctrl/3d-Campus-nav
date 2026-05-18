@@ -68,9 +68,10 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
     return null;
   }
 
-  const scale = options.scale ?? 0.1;
+ const scale = options.scale ?? 0.1;
   const camera = options.camera ?? null;
   const cameraRelative = options.cameraRelative ?? false;
+  const originOffset = options.originOffset ?? { x: 0, y: 0, z: 0 };
 
   const relativeRoute = convertRouteToAnchorRelative(
     graph,
@@ -95,12 +96,12 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
   } else {
     // Anchor-relative mode:
     // Draw route according to campus coordinates.
-    arPoints = relativeRoute.map((point) => ({
+    relativeRoute.map((point) => ({
       id: point.id,
-      x: point.x * scale,
-      y: -0.45,
-      z: -point.z * scale
-    }));
+      x: originOffset.x + point.x * scale,
+      y: originOffset.y - 0.45,
+      z: originOffset.z - point.z * scale
+  }));
   }
 
   for (let i = 0; i < arPoints.length - 1; i++) {
