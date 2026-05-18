@@ -463,7 +463,12 @@ function displayRouteInfo(path, distance, fromDestination, toDestination, indoor
   }
 
   panel.innerHTML = `
+  <div class="route-info-header">
     <h2>Route Information</h2>
+    <button id="route-info-minimize" class="panel-minimize-button">−</button>
+  </div>
+
+  <div class="route-info-content">
     <p><strong>From:</strong> ${fromDestination?.name || 'Unknown'}</p>
     <p><strong>To:</strong> ${toDestination?.name || 'Unknown'}</p>
     <p><strong>Outdoor distance:</strong> ${distance.toFixed(1)} m</p>
@@ -475,9 +480,20 @@ function displayRouteInfo(path, distance, fromDestination, toDestination, indoor
 
     <p><strong>Indoor route steps:</strong></p>
     <ol>${indoorSteps}</ol>
-  `;
+  </div>
+`;
 
   panel.style.display = 'block';
+  const minimizeButton = document.getElementById('route-info-minimize');
+
+  if (minimizeButton) {
+    minimizeButton.addEventListener('click', () => {
+      panel.classList.toggle('collapsed');
+
+    const isCollapsed = panel.classList.contains('collapsed');
+    minimizeButton.textContent = isCollapsed ? '+' : '−';
+  });
+}
 }
 
 function hideRouteInfo() {
@@ -523,7 +539,7 @@ async function createARButton() {
       latestOutdoorPath,
       latestAnchor.position,
       {
-        scale: 0.05
+        scale: 0.1
       }
     );
 

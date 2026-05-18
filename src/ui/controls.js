@@ -9,8 +9,22 @@ export function createRouteControls(
   container.id = 'route-controls';
   container.className = 'route-controls';
 
+  const header = document.createElement('div');
+  header.className = 'route-controls-header';
+
   const title = document.createElement('h2');
   title.textContent = 'Route Navigation';
+
+  const minimizeButton = document.createElement('button');
+  minimizeButton.className = 'panel-minimize-button';
+  minimizeButton.textContent = '−';
+  minimizeButton.title = 'Minimize panel';
+
+  header.appendChild(title);
+  header.appendChild(minimizeButton);
+
+  const content = document.createElement('div');
+  content.className = 'route-controls-content';
 
   // Current location / anchor selector
   const currentLocationLabel = document.createElement('label');
@@ -77,20 +91,29 @@ export function createRouteControls(
     }
   });
 
-  container.appendChild(title);
+  minimizeButton.addEventListener('click', () => {
+    container.classList.toggle('collapsed');
 
-  container.appendChild(currentLocationLabel);
-  container.appendChild(currentLocationSelect);
+    const isCollapsed = container.classList.contains('collapsed');
+    minimizeButton.textContent = isCollapsed ? '+' : '−';
+    minimizeButton.title = isCollapsed ? 'Expand panel' : 'Minimize panel';
+  });
 
-  container.appendChild(toLabel);
-  container.appendChild(toSelect);
+  content.appendChild(currentLocationLabel);
+  content.appendChild(currentLocationSelect);
 
-  container.appendChild(showButton);
-  container.appendChild(clearButton);
+  content.appendChild(toLabel);
+  content.appendChild(toSelect);
 
-  container.appendChild(commandLabel);
-  container.appendChild(commandInput);
-  container.appendChild(commandButton);
+  content.appendChild(showButton);
+  content.appendChild(clearButton);
+
+  content.appendChild(commandLabel);
+  content.appendChild(commandInput);
+  content.appendChild(commandButton);
+
+  container.appendChild(header);
+  container.appendChild(content);
 
   document.getElementById('ui').appendChild(container);
 
