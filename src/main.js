@@ -85,6 +85,43 @@ let latestAnchor = null;
 let arDebugCube = null;
 
 
+function applyAnchorRelativeCampusTransform(anchor, scale = 0.05) {
+  if (!anchor) return;
+
+  campusARObjects.forEach((object) => {
+    if (!object) return;
+
+    const original = originalCampusTransforms.get(object);
+
+    if (!original) return;
+
+    object.position.set(
+      (original.position.x - anchor.position.x) * scale,
+      original.position.y * scale,
+      -1.5 - (original.position.z - anchor.position.z) * scale
+    );
+
+    object.scale.set(
+      original.scale.x * scale,
+      original.scale.y * scale,
+      original.scale.z * scale
+    );
+  });
+}
+
+function restoreCampusTransform() {
+  campusARObjects.forEach((object) => {
+    if (!object) return;
+
+    const original = originalCampusTransforms.get(object);
+
+    if (!original) return;
+
+    object.position.copy(original.position);
+    object.scale.copy(original.scale);
+  });
+}
+
 function showARWorldDebugCube() {
   if (arDebugCube) {
     if (arDebugCube.parent) {
@@ -123,11 +160,31 @@ function setIndoorLayerVisible(visible) {
 }
 
 // Create roads
-createMeasuredRoad(scene);
-createMensaPer17Road(scene);
-createPedestrianPaths(scene, pedestrianPaths);
+const mainRoad = createMeasuredRoad(scene);
+const mensaPer17Road = createMensaPer17Road(scene);
+const pedestrianPathMeshes = createPedestrianPaths(scene, pedestrianPaths);
 
 
+const campusARObjects = [
+  ...Object.values(buildingMeshes),
+  ...Object.values(entranceMeshes),
+  ...indoorStructureMeshes,
+  ...indoorMarkerMeshes,
+  mainRoad,
+  mensaPer17Road,
+  ...pedestrianPathMeshes
+];
+
+const originalCampusTransforms = new Map();
+
+campusARObjects.forEach((object) => {
+  if (!object) return;
+
+  originalCampusTransforms.set(object, {
+    position: object.position.clone(),
+    scale: object.scale.clone()
+  });
+});
 // test pathfinding and route rendering
 createRouteControls(
   anchors,
@@ -568,6 +625,7 @@ async function createARButton() {
    // showARWorldDebugCube();
 
     enterARViewMode();
+    applyAnchorRelativeCampusTransform(latestAnchor, 0.05);
 
    renderARRoute(
       scene,
@@ -582,6 +640,7 @@ async function createARButton() {
     );
 
     session.addEventListener('end', () => {
+      restoreCampusTransform();
       exitARViewMode();
       button.textContent = 'Start AR';
     });
