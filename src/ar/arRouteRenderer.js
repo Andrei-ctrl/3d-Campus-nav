@@ -11,6 +11,10 @@ function createCylinderBetweenPoints(start, end, radius, color) {
   const direction = new THREE.Vector3().subVectors(endVector, startVector);
   const length = direction.length();
 
+  if (length < 0.001) {
+    return null;
+  }
+
   const geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
   const material = new THREE.MeshBasicMaterial({ color });
 
@@ -68,10 +72,10 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
     return null;
   }
 
- const scale = options.scale ?? 0.1;
+  const scale = options.scale ?? 0.05;
   const camera = options.camera ?? null;
   const cameraRelative = options.cameraRelative ?? false;
-  const originOffset = options.originOffset ?? { x: 0, y: 0, z: 0 };
+  const originOffset = options.originOffset ?? { x: 0, y: -0.45, z: -1.5 };
 
   const relativeRoute = convertRouteToAnchorRelative(
     graph,
@@ -96,12 +100,12 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
   } else {
     // Anchor-relative mode:
     // Draw route according to campus coordinates.
-    relativeRoute.map((point) => ({
+    arPoints = relativeRoute.map((point) => ({
       id: point.id,
       x: originOffset.x + point.x * scale,
-      y: originOffset.y - 0.45,
+      y: originOffset.y,
       z: originOffset.z - point.z * scale
-  }));
+    }));
   }
 
   for (let i = 0; i < arPoints.length - 1; i++) {
@@ -112,7 +116,9 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
       0x00ff00
     );
 
-    group.add(segment);
+    if (segment) {
+      group.add(segment);
+    }
   }
 
   arPoints.forEach((point, index) => {

@@ -565,19 +565,19 @@ async function createARButton() {
 
     const session = await startARSession(renderer);
 
-    showARWorldDebugCube();
+   // showARWorldDebugCube();
 
     enterARViewMode();
 
-    renderARRoute(
+   renderARRoute(
       scene,
       graph,
       latestOutdoorPath,
       latestAnchor.position,
       {
-        scale: 0.1,
-        camera,
-        cameraRelative: true
+        scale: 0.05,
+        cameraRelative: false,
+        originOffset: { x: 0, y: -0.45, z: -1.5 }
       }
     );
 
