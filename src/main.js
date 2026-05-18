@@ -84,7 +84,6 @@ let latestOutdoorPath = [];
 let latestAnchor = null;
 let arDebugCube = null;
 
-let arDebugCube = null;
 
 function showARWorldDebugCube() {
   if (arDebugCube) {
