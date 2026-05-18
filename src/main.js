@@ -82,6 +82,37 @@ const per21IndoorMeshes = [
 let isIndoorLayerVisible = true;
 let latestOutdoorPath = [];
 let latestAnchor = null;
+let arDebugCube = null;
+
+function showARDebugCube() {
+  if (arDebugCube) {
+    camera.remove(arDebugCube);
+    arDebugCube.geometry.dispose();
+    arDebugCube.material.dispose();
+    arDebugCube = null;
+  }
+
+  const geometry = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xff0000
+  });
+
+  arDebugCube = new THREE.Mesh(geometry, material);
+
+  // Attached to the camera:
+  // x = center
+  // y = slightly below center
+  // z = 1 meter in front of camera
+  arDebugCube.position.set(0, -0.25, -1);
+
+  camera.add(arDebugCube);
+
+  if (!scene.children.includes(camera)) {
+    scene.add(camera);
+  }
+
+  console.log('AR debug cube added in front of camera');
+}
 
 function setIndoorLayerVisible(visible) {
   isIndoorLayerVisible = visible;
@@ -525,6 +556,8 @@ async function createARButton() {
 
     await startARSession(renderer);
 
+    showARDebugCube();
+    
     if (!latestAnchor || latestOutdoorPath.length < 2) {
       alert('Please select a current location and show a route before starting AR.');
       button.textContent = 'Start AR';
