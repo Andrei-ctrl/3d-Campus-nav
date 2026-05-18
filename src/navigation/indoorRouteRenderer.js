@@ -1,8 +1,14 @@
 import * as THREE from 'three';
 
 let currentIndoorRouteMeshes = [];
+let isIndoorRouteVisible = true;
+const indoorRouteBuildingVisibility = new Map();
 
-function createIndoorRouteSegment(start, end) {
+function isBuildingRouteVisible(buildingId) {
+  return indoorRouteBuildingVisibility.get(buildingId) ?? true;
+}
+
+function createIndoorRouteSegment(start, end, options = {}) {
   const dx = end.x - start.x;
   const dz = end.z - start.z;
 
@@ -33,9 +39,13 @@ function createIndoorRouteSegment(start, end) {
 
   mesh.userData = {
     type: 'indoor-route',
+    layer: 'routes',
+    buildingId: options.buildingId || null,
     id: 'INDOOR_ROUTE_SEGMENT',
     name: 'Indoor route segment'
   };
+
+  mesh.visible = isIndoorRouteVisible && isBuildingRouteVisible(options.buildingId);
 
   return mesh;
 }
@@ -51,7 +61,25 @@ export function clearIndoorRoute(scene) {
   currentIndoorRouteMeshes = [];
 }
 
-export function renderIndoorRoute(scene, indoorGraph, pathNodeIds) {
+export function setIndoorRouteVisible(visible) {
+  isIndoorRouteVisible = visible;
+
+  currentIndoorRouteMeshes.forEach((mesh) => {
+    mesh.visible = visible && isBuildingRouteVisible(mesh.userData.buildingId);
+  });
+}
+
+export function setIndoorRouteBuildingVisible(buildingId, visible) {
+  indoorRouteBuildingVisibility.set(buildingId, visible);
+
+  currentIndoorRouteMeshes.forEach((mesh) => {
+    if (mesh.userData.buildingId !== buildingId) return;
+
+    mesh.visible = isIndoorRouteVisible && visible;
+  });
+}
+
+export function renderIndoorRoute(scene, indoorGraph, pathNodeIds, options = {}) {
   clearIndoorRoute(scene);
 
   if (!pathNodeIds || pathNodeIds.length < 2) {
@@ -64,7 +92,7 @@ export function renderIndoorRoute(scene, indoorGraph, pathNodeIds) {
 
     if (!startNode || !endNode) continue;
 
-    const segment = createIndoorRouteSegment(startNode, endNode);
+    const segment = createIndoorRouteSegment(startNode, endNode, options);
 
     scene.add(segment);
     currentIndoorRouteMeshes.push(segment);

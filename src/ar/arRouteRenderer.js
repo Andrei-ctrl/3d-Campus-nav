@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { convertRouteToAnchorRelative } from './arRouteAdapter.js';
 
 let currentARRouteGroup = null;
+let isARRouteVisible = true;
 
 
 function createCylinderBetweenPoints(start, end, radius, color) {
@@ -64,6 +65,14 @@ export function clearARRoute(scene) {
   currentARRouteGroup = null;
 }
 
+export function setARRouteVisible(visible) {
+  isARRouteVisible = visible;
+
+  if (currentARRouteGroup) {
+    currentARRouteGroup.visible = visible;
+  }
+}
+
 export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options = {}) {
   clearARRoute(scene);
 
@@ -85,6 +94,11 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
 
   const group = new THREE.Group();
   group.name = 'AR_ROUTE_GROUP';
+  group.userData = {
+    type: 'ar-route',
+    layer: 'routes'
+  };
+  group.visible = isARRouteVisible;
 
   let arPoints;
 

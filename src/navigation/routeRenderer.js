@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 let currentRouteMeshes = [];
+let isRouteVisible = true;
 
 function createRouteSegment(start, end) {
   const dx = end.x - start.x;
@@ -26,9 +27,12 @@ function createRouteSegment(start, end) {
 
   mesh.userData = {
     type: 'route',
+    layer: 'routes',
     id: 'ROUTE_SEGMENT',
     name: 'Navigation route segment'
   };
+
+  mesh.visible = isRouteVisible;
 
   return mesh;
 }
@@ -42,6 +46,14 @@ export function clearRoute(scene) {
   });
 
   currentRouteMeshes = [];
+}
+
+export function setRouteVisible(visible) {
+  isRouteVisible = visible;
+
+  currentRouteMeshes.forEach((mesh) => {
+    mesh.visible = visible;
+  });
 }
 
 export function renderRoute(scene, graph, pathNodeIds) {
