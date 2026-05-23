@@ -454,7 +454,8 @@ function showRoute(fromDestinationId, toDestinationId) {
       0,
       fromDestination,
       toDestination,
-      indoorPath
+      indoorPath,
+      ''
     );
 
     return;
@@ -723,11 +724,11 @@ function displayRouteInfo(path, distance, fromDestination, toDestination, indoor
   if (minimizeButton) {
     minimizeButton.addEventListener('click', () => {
       panel.classList.toggle('collapsed');
+      const isCollapsed = panel.classList.contains('collapsed');
+      minimizeButton.textContent = isCollapsed ? '+' : '−';
+    });
+  }
 
-    const isCollapsed = panel.classList.contains('collapsed');
-    minimizeButton.textContent = isCollapsed ? '+' : '−';
-  });
-}
   makeWidgetDraggable(panel, panel.querySelector('.route-info-header'));
 }
 
@@ -1057,6 +1058,34 @@ setupStaticInfoPanel();
 createLayerToggles();
 createARCalibrationPanel();
 createARButton();
+
+// Keyboard zoom controls
+window.addEventListener('keydown', (event) => {
+  const tag = event.target.tagName.toLowerCase();
+
+  if (tag === 'input' || tag === 'select' || tag === 'textarea') {
+    return;
+  }
+
+  const zoomStep = 25;
+
+  if (event.key === '+' || event.key === '=') {
+    event.preventDefault();
+    controls._radius -= zoomStep;
+  }
+
+  if (event.key === '-' || event.key === '_') {
+    event.preventDefault();
+    controls._radius += zoomStep;
+  }
+
+  controls._radius = Math.max(
+    controls.minDistance,
+    Math.min(controls.maxDistance, controls._radius)
+  );
+
+  controls.update();
+});
 // Animation loop
 function animate() {
   controls.update();

@@ -17,7 +17,7 @@ function createIndoorRouteSegment(start, end, options = {}) {
 
   const geometry = new THREE.BoxGeometry(length, 0.22, 2.2);
   const material = new THREE.MeshBasicMaterial({
-    color: 0x2196f3
+    color: 0x00ff00
   });
 
   const mesh = new THREE.Mesh(geometry, material);

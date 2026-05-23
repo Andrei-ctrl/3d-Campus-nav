@@ -492,3 +492,7 @@ canvas {
 .route-info.collapsed .route-info-content {
   display: none;
 }
+
+#info-panel {
+  display: none;
+}
