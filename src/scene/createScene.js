@@ -128,7 +128,7 @@ export function createOrbitControls(camera, renderer) {
   let previousMousePosition = { x: 0, y: 0 };
 
   renderer.domElement.addEventListener('mousedown', (e) => {
-    if (e.button === 1) {
+    if (e.button === 0) {
       isDragging = true;
       previousMousePosition = { x: e.clientX, y: e.clientY };
     }
