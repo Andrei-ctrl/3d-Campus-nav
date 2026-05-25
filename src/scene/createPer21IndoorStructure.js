@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FLOOR_HEIGHT, buildingHeight } from '../data/buildings.js';
 import {
   PER21_SIDE_ENTRANCE_CORES,
   PER21_BACK_CLASSROOM_Z,
@@ -22,10 +23,16 @@ const CORE_Z = 47;
 const INSIDE_Z = 45;
 const PUBLIC_Z = 70;
 const CLASSROOM_Z = PER21_BACK_CLASSROOM_Z;
+const PER21_FLOOR_COUNT = 5;
+const INDOOR_BASE_Y = buildingHeight(PER21_FLOOR_COUNT) + 1;
 const VERTICAL_SHAFT_HEIGHT = 22;
 
 function toWorldX(localX) {
   return PER21_CENTER_X - PER21_MEASURED_LENGTH / 2 + localX;
+}
+
+function floorY(floor = 0, offset = 0.2) {
+  return INDOOR_BASE_Y + floor * FLOOR_HEIGHT + offset;
 }
 
 function applyIndoorUserData(mesh, id, name) {
@@ -39,7 +46,7 @@ function applyIndoorUserData(mesh, id, name) {
   return mesh;
 }
 
-function createIndoorBox(center, size, color, id, name, y = 9.2, opacity = 0.55) {
+function createIndoorBox(center, size, color, id, name, y = floorY(0), opacity = 0.55) {
   const geometry = new THREE.BoxGeometry(size.length, size.height, size.width);
 
   const material = new THREE.MeshStandardMaterial({
@@ -57,7 +64,7 @@ function createIndoorBox(center, size, color, id, name, y = 9.2, opacity = 0.55)
   return applyIndoorUserData(mesh, id, name);
 }
 
-function createIndoorDisc(x, z, radius, color, id, name, y = 9.45, opacity = 0.72) {
+function createIndoorDisc(x, z, radius, color, id, name, y = floorY(0, 0.45), opacity = 0.72) {
   const geometry = new THREE.CylinderGeometry(radius, radius, 0.5, 32);
   const material = new THREE.MeshStandardMaterial({
     color,
@@ -84,7 +91,7 @@ function createEntranceTriangle(x, id, name, z = FRONT_Z) {
   });
   const mesh = new THREE.Mesh(geometry, material);
 
-  mesh.position.set(toWorldX(x), 9.5, z);
+  mesh.position.set(toWorldX(x), floorY(0, 0.5), z);
   mesh.rotation.y = Math.PI / 2;
 
   return applyIndoorUserData(mesh, id, name);
@@ -97,7 +104,7 @@ function createBackEntranceSquare(x, id, name) {
     0x80deea,
     id,
     name,
-    9.45,
+    floorY(0, 0.45),
     0.76
   );
 }
@@ -176,7 +183,7 @@ function createClassroomVolumes() {
       0x90caf9,
       `PER21_${gap.roomId}_VOLUME`,
       gap.notes || 'PER21 corridor space',
-      12.55,
+      floorY(1, 0.55),
       0.48
     )),
     ...per21CubicFirstFloorRooms.map((room) => createIndoorBox(
@@ -187,7 +194,7 @@ function createClassroomVolumes() {
       room.notes
         ? `PER21 ${room.roomId} cubic room — ${room.notes}`
         : `PER21 ${room.roomId} cubic room`,
-      15.2,
+      floorY(1, 3.2),
       0.44
     )),
     ...per21ClassroomFirstFloorRooms.map((room) => createIndoorBox(
@@ -196,7 +203,7 @@ function createClassroomVolumes() {
       0x4fc3f7,
       `PER21_${room.roomId}_CLASSROOM_VOLUME`,
       `PER21 ${room.roomId} classroom`,
-      13.4,
+      floorY(1, 1.4),
       0.58
     )),
     ...per21UpperFloorRooms.map((room) => createIndoorBox(
@@ -205,7 +212,7 @@ function createClassroomVolumes() {
       0x81d4fa,
       `PER21_${room.roomId}_ROOM_VOLUME`,
       `PER21 ${room.roomId} upper classroom`,
-      18.9,
+      floorY(3, 0.9),
       0.54
     ))
   ];
@@ -219,7 +226,7 @@ export function createPer21IndoorStructure(scene) {
       0x0d47a1,
       'PER21_FLOOR_1_FOOTPRINT',
       'PER21 floor 1 measured footprint',
-      9.05,
+      floorY(0, 0.05),
       0.18
     ),
     createIndoorBox(
@@ -228,7 +235,7 @@ export function createPer21IndoorStructure(scene) {
       0xb3e5fc,
       'PER21_MAIN_CORRIDOR_F1',
       'PER21 main corridor floor 1',
-      9.25,
+      floorY(0, 0.25),
       0.55
     ),
 
@@ -238,7 +245,7 @@ export function createPer21IndoorStructure(scene) {
       0x80deea,
       'PER21_PER22_CONNECTION_ENTRANCE_AREA',
       'PER21 PER22 connection (indoor only)',
-      9.45,
+      floorY(0, 0.45),
       0.76
     ),
     createEntranceTriangle(21, 'PER21_END_SIDE_ENTRANCE_AREA', 'PER21 end side entrance'),
@@ -257,7 +264,7 @@ export function createPer21IndoorStructure(scene) {
       0xfff59d,
       'PER21_CAFETERIA_AREA',
       'PER21 cafeteria',
-      9.45,
+      floorY(0, 0.45),
       0.72
     ),
     createIndoorBox(
@@ -266,7 +273,7 @@ export function createPer21IndoorStructure(scene) {
       0xffcc80,
       'PER21_RESTAURANT_AREA',
       'PER21 restaurant',
-      9.45,
+      floorY(0, 0.45),
       0.65
     ),
     createIndoorBox(
@@ -275,7 +282,7 @@ export function createPer21IndoorStructure(scene) {
       0xffe082,
       'PER21_DECANAT_AREA',
       'PER21 decanat',
-      9.5,
+      floorY(0, 0.5),
       0.68
     ),
     createIndoorBox(
@@ -284,7 +291,7 @@ export function createPer21IndoorStructure(scene) {
       0xa5d6a7,
       'PER21_COMMUNICATIONS_AREA',
       'PER21 communications',
-      9.45,
+      floorY(0, 0.45),
       0.65
     ),
     createIndoorBox(
@@ -293,7 +300,7 @@ export function createPer21IndoorStructure(scene) {
       0x81c784,
       'PER21_RECEPTION_AREA',
       'PER21 reception',
-      9.45,
+      floorY(0, 0.45),
       0.65
     ),
     createIndoorBox(
@@ -302,7 +309,7 @@ export function createPer21IndoorStructure(scene) {
       0x90caf9,
       'PER21_ASEA_AREA',
       'PER21 ASEA',
-      9.45,
+      floorY(0, 0.45),
       0.66
     ),
 
@@ -312,7 +319,7 @@ export function createPer21IndoorStructure(scene) {
       0xce93d8,
       'PER21_TOILETS_WEST_AREA',
       'PER21 toilets near side entrance 1',
-      9.45
+      floorY(0, 0.45)
     ),
     createIndoorBox(
       { x: 97, z: PUBLIC_Z },
@@ -320,7 +327,7 @@ export function createPer21IndoorStructure(scene) {
       0xce93d8,
       'PER21_TOILETS_CENTER_AREA',
       'PER21 toilets near side entrance 2',
-      9.45
+      floorY(0, 0.45)
     ),
     createIndoorBox(
       { x: 61, z: PUBLIC_Z },
@@ -328,7 +335,7 @@ export function createPer21IndoorStructure(scene) {
       0xce93d8,
       'PER21_TOILETS_EAST_AREA',
       'PER21 toilets near side entrance 3',
-      9.45
+      floorY(0, 0.45)
     ),
     createIndoorBox(
       { x: 51, z: PUBLIC_Z },
@@ -336,7 +343,7 @@ export function createPer21IndoorStructure(scene) {
       0x80cbc4,
       'PER21_SERVICE_BACK_SPACE_AREA',
       'PER21 service/back space',
-      9.45
+      floorY(0, 0.45)
     ),
     createIndoorBox(
       { x: 45, z: PUBLIC_Z },
@@ -344,7 +351,7 @@ export function createPer21IndoorStructure(scene) {
       0x4db6ac,
       'PER21_SMALL_BACK_SPACE_AREA',
       'PER21 small back space',
-      9.55
+      floorY(0, 0.55)
     ),
 
     ...createSideVerticalCores(),
@@ -356,7 +363,7 @@ export function createPer21IndoorStructure(scene) {
       0x64b5f6,
       'PER21_FIRST_FLOOR_CORRIDOR',
       'PER21 first classroom floor corridor',
-      12.2
+      floorY(1, 0.2)
     ),
     createIndoorBox(
       { x: 74.5, z: CLASSROOM_Z },
@@ -364,7 +371,7 @@ export function createPer21IndoorStructure(scene) {
       0x42a5f5,
       'PER21_FIRST_FLOOR_CLASSROOM_ROW',
       'PER21 first classroom floor row',
-      12.45
+      floorY(1, 0.45)
     ),
     ...createClassroomVolumes(),
     createIndoorBox(
@@ -373,7 +380,7 @@ export function createPer21IndoorStructure(scene) {
       0x1976d2,
       'PER21_SECOND_FLOOR_CORRIDOR',
       'PER21 second classroom floor corridor',
-      15.2
+      floorY(2, 0.2)
     ),
     createIndoorBox(
       { x: 74.5, z: CLASSROOM_Z },
@@ -381,7 +388,7 @@ export function createPer21IndoorStructure(scene) {
       0x1565c0,
       'PER21_SECOND_FLOOR_CLASSROOM_ROW',
       'PER21 second classroom floor row',
-      15.45
+      floorY(2, 0.45)
     ),
     createIndoorBox(
       { x: 66, z: CLASSROOM_Z },
@@ -389,7 +396,7 @@ export function createPer21IndoorStructure(scene) {
       0x0d47a1,
       'PER21_THIRD_FLOOR_CORRIDOR',
       'PER21 third floor corridor',
-      18.2
+      floorY(3, 0.2)
     ),
     createIndoorBox(
       { x: 74.5, z: CLASSROOM_Z },
@@ -397,7 +404,7 @@ export function createPer21IndoorStructure(scene) {
       0x2196f3,
       'PER21_THIRD_FLOOR_ROOM_ROW',
       'PER21 third floor room row',
-      18.45
+      floorY(3, 0.45)
     ),
     createIndoorBox(
       { x: 66, z: CLASSROOM_Z },
@@ -405,7 +412,7 @@ export function createPer21IndoorStructure(scene) {
       0x283593,
       'PER21_FOURTH_FLOOR_CORRIDOR',
       'PER21 fourth floor office corridor',
-      21.2
+      floorY(4, 0.2)
     ),
     createIndoorBox(
       { x: 74.5, z: CLASSROOM_Z },
@@ -413,7 +420,7 @@ export function createPer21IndoorStructure(scene) {
       0x5c6bc0,
       'PER21_FOURTH_FLOOR_OFFICE_ROW',
       'PER21 fourth floor office row',
-      21.45
+      floorY(4, 0.45)
     ),
     createIndoorBox(
       { x: 66, z: CLASSROOM_Z },
@@ -421,7 +428,7 @@ export function createPer21IndoorStructure(scene) {
       0x1a237e,
       'PER21_FIFTH_FLOOR_CORRIDOR',
       'PER21 fifth floor office corridor',
-      24.2
+      floorY(5, 0.2)
     ),
     createIndoorBox(
       { x: 74.5, z: CLASSROOM_Z },
@@ -429,7 +436,7 @@ export function createPer21IndoorStructure(scene) {
       0x3949ab,
       'PER21_FIFTH_FLOOR_OFFICE_ROW',
       'PER21 fifth floor office row',
-      24.45
+      floorY(5, 0.45)
     ),
     createIndoorBox(
       { x: 66, z: 46.5 },
@@ -437,7 +444,7 @@ export function createPer21IndoorStructure(scene) {
       0x0d47a1,
       'PER21_UPPER_MAIN_ENTRANCE_WING',
       'PER21 upper main entrance wing',
-      13.5,
+      floorY(1, 1.5),
       0.32
     ),
     createVerticalShaft(20, FRONT_Z + 1, 'PER21_UPPER_STAIRS_A', 'PER21 upper stairs A', 0x64b5f6, 2.2),

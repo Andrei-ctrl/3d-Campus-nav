@@ -1,9 +1,16 @@
 import * as THREE from 'three';
+import { FLOOR_HEIGHT, buildingHeight } from '../data/buildings.js';
 
 let currentIndoorRouteMeshes = [];
 let isIndoorRouteVisible = true;
 const indoorRouteBuildingVisibility = new Map();
 let onIndoorRouteMeshesChanged = null;
+
+const ROUTE_BASE_Y_BY_BUILDING = {
+  PER21: buildingHeight(5) + 1,
+  PER22: buildingHeight(2) + 1,
+  PER17: buildingHeight(2) + 1
+};
 
 export function setIndoorRouteCalibrationHook(callback) {
   onIndoorRouteMeshesChanged = callback;
@@ -32,8 +39,8 @@ function createIndoorRouteSegment(start, end, options = {}) {
   const endFloor = end.floor || 0;
   const averageFloor = (startFloor + endFloor) / 2;
 
-  // PER21 height is about 8m. We draw indoor route above the building surface for visibility.
-  const y = 9 + averageFloor * 3;
+  const routeBaseY = ROUTE_BASE_Y_BY_BUILDING[options.buildingId] ?? 9;
+  const y = routeBaseY + averageFloor * FLOOR_HEIGHT;
 
   mesh.position.set(
     (start.x + end.x) / 2,

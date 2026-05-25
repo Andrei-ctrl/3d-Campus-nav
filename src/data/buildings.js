@@ -17,8 +17,8 @@ export const buildings = [
     type: "Building",
     description: "Main PER21 building, approx. 132m x 38m based on the measured floor plan sketch",
     position: { x: 10, y: 0, z: 56 },
-    size: { length: 132, width: 38, height: buildingHeight(2) },
-    floors: 2,
+    size: { length: 132, width: 38, height: buildingHeight(5) },
+    floors: 5,
     rotationDeg: 0,
     color: "#0057b8"
   },

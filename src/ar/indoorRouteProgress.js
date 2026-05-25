@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { convertMapPointToAnchorRelative } from './arRouteAdapter.js';
+import { FLOOR_HEIGHT } from '../data/buildings.js';
 
 // In WebXR AR the camera pose comes from real phone movement (ARCore/WebXR).
 // The route group is anchored once at a known entrance and stays fixed in world space.
@@ -7,7 +8,7 @@ import { convertMapPointToAnchorRelative } from './arRouteAdapter.js';
 
 export const DEFAULT_INDOOR_REACHED_THRESHOLD = 1.5;
 const ROUTE_Y_OFFSET = 0.02;
-const FLOOR_STEP = 3;
+const FLOOR_STEP = FLOOR_HEIGHT;
 
 const VERTICAL_NODE_PATTERN = /(STAIRS|ELEVATOR|LIFT)/i;
 
