@@ -181,11 +181,13 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
   });
 
   if (cameraRelative && camera) {
-    camera.add(group);
+    const cameraWorldPosition = new THREE.Vector3();
+    camera.getWorldPosition(cameraWorldPosition);
+    const cameraHeading = getCameraHeading(camera);
 
-    if (!scene.children.includes(camera)) {
-      scene.add(camera);
-    }
+    group.position.set(cameraWorldPosition.x, 0, cameraWorldPosition.z);
+    group.rotation.set(0, cameraHeading, 0);
+    scene.add(group);
   } else if (alignToCamera && camera) {
     const cameraWorldPosition = new THREE.Vector3();
     camera.getWorldPosition(cameraWorldPosition);

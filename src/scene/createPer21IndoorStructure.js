@@ -110,13 +110,15 @@ function createBackEntranceSquare(x, id, name) {
 }
 
 function createVerticalShaft(x, z, id, name, color, width = 2.2) {
+  const groundY = floorY(0, 0);
+
   return createIndoorBox(
     { x, z },
     { length: width, width: 2.2, height: VERTICAL_SHAFT_HEIGHT },
     color,
     id,
     name,
-    VERTICAL_SHAFT_HEIGHT / 2,
+    groundY + VERTICAL_SHAFT_HEIGHT / 2,
     0.68
   );
 }

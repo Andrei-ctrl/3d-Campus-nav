@@ -189,14 +189,32 @@ const AR_BASE_Y_BY_GROUP = {
   buildings: 0,
   per21Indoor: buildingHeight(5) + 1,
   per22Indoor: 0,
-  per17Indoor: 9,
-  markers: 9,
+  per17Indoor: buildingHeight(2) + 1,
+  markers: 0,
   paths: 0,
   ground: 0,
-  routes: 9
+  routes: 0
 };
 
-function getArBaseY(groupName) {
+function getMarkerArBaseY(object) {
+  const buildingId = object?.userData?.buildingId;
+
+  if (buildingId === 'PER21') {
+    return buildingHeight(5) + 0.5;
+  }
+
+  if (buildingId === 'PER22' || buildingId === 'PER17') {
+    return buildingHeight(2) + 0.5;
+  }
+
+  return AR_BASE_Y_BY_GROUP.markers;
+}
+
+function getArBaseY(groupName, object = null) {
+  if (groupName === 'markers') {
+    return getMarkerArBaseY(object);
+  }
+
   return AR_BASE_Y_BY_GROUP[groupName] ?? 0;
 }
 
@@ -224,7 +242,7 @@ function applyTransformToObject(object, calibration, options = {}) {
     const dz = original.position.z - anchor.z;
 
     positionX = mirrorX * dx * arScale;
-    positionY = (original.position.y - getArBaseY(groupName)) * arScale;
+    positionY = (original.position.y - getArBaseY(groupName, object)) * arScale;
     positionZ = -dz * arScale;
 
     scaleX = original.scale.x * arScale;
