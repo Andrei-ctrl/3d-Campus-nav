@@ -2,6 +2,7 @@ import { setupWidget } from './widgets.js';
 import {
   applySceneCalibration,
   getSceneCalibration,
+  getSceneMirrorLabel,
   resetSceneCalibration,
   saveSceneCalibration,
   setSceneCalibration
@@ -83,7 +84,7 @@ function readCalibrationFromControls(controls, modeSelect, livePreviewCheckbox, 
   return next;
 }
 
-export function createCalibrationPanel({ anchors = [], onApply } = {}) {
+export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle } = {}) {
   const container = document.createElement('div');
   container.id = 'ar-calibration-panel';
   container.className = 'ar-calibration-panel calibration-panel';
@@ -240,6 +241,16 @@ export function createCalibrationPanel({ anchors = [], onApply } = {}) {
     });
   });
 
+  const flipButton = document.createElement('button');
+  flipButton.type = 'button';
+  flipButton.className = 'scene-mirror-button calibration-flip-button';
+  flipButton.textContent = `Flip scene ↔ (${getSceneMirrorLabel()})`;
+  flipButton.addEventListener('click', () => {
+    onMirrorToggle?.();
+    flipButton.textContent = `Flip scene ↔ (${getSceneMirrorLabel()})`;
+  });
+  content.appendChild(flipButton);
+
   const applyButton = document.createElement('button');
   applyButton.textContent = 'Apply calibration';
 
@@ -267,6 +278,7 @@ export function createCalibrationPanel({ anchors = [], onApply } = {}) {
     livePreviewCheckbox.checked = getSceneCalibration().livePreview;
     pivotSelect.value = 'origin';
     syncControlValues(controls, getSceneCalibration());
+    flipButton.textContent = `Flip scene ↔ (${getSceneMirrorLabel()})`;
     onApply?.(getSceneCalibration());
   });
 

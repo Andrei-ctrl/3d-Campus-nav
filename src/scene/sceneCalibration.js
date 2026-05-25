@@ -183,13 +183,13 @@ function applyTransformToObject(object, calibration, options = {}) {
   if (options.anchor && isARActive) {
     const anchor = options.anchor.position;
     const arScale = calibration.arScale;
-    const arMirrorX = calibration.arMirrorX ?? -1;
+    const mirrorX = calibration.arMirrorX ?? -1;
     const dx = original.position.x - anchor.x;
     const dz = original.position.z - anchor.z;
 
     positionX =
       calibration.arOffsetX +
-      arMirrorX * dx * arScale * groupScale;
+      mirrorX * dx * arScale * groupScale;
     positionY = calibration.arOffsetY + original.position.y * arScale * groupScale;
     positionZ =
       calibration.arOffsetZ -
@@ -250,4 +250,33 @@ export function resetSceneCalibration() {
   sceneCalibration = { ...defaultSceneCalibration };
   saveSceneCalibration();
   applySceneCalibration();
+}
+
+export function getSceneMirrorX() {
+  return sceneCalibration.arMirrorX ?? -1;
+}
+
+export function isSceneMirrored() {
+  return getSceneMirrorX() === -1;
+}
+
+export function getSceneMirrorLabel() {
+  return isSceneMirrored() ? 'Mirrored (AR)' : 'Default (AR)';
+}
+
+export function toggleSceneMirrorX(options = {}) {
+  const nextMirrorX = getSceneMirrorX() === -1 ? 1 : -1;
+
+  sceneCalibration = {
+    ...sceneCalibration,
+    arMirrorX: nextMirrorX
+  };
+
+  if (options.save !== false) {
+    saveSceneCalibration();
+  }
+
+  applySceneCalibration();
+
+  return nextMirrorX;
 }
