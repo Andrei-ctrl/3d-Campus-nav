@@ -306,12 +306,16 @@ export function anchorRouteCameraDebug(routeGroup, camera, routeState, scene) {
     routeGroup.parent.remove(routeGroup);
   }
 
-  camera.add(routeGroup);
-  routeGroup.position.set(0, 0, 0);
-  routeGroup.rotation.set(0, 0, 0);
+  const cameraWorldPosition = new THREE.Vector3();
+  camera.getWorldPosition(cameraWorldPosition);
+  const heading = getCameraHeading(camera);
+  const floorY = routeState.routePointEntries[0]?.localPoint.y ?? ROUTE_Y_OFFSET;
 
-  if (scene && !scene.children.includes(camera)) {
-    scene.add(camera);
+  routeGroup.position.set(cameraWorldPosition.x, floorY, cameraWorldPosition.z);
+  routeGroup.rotation.set(0, heading, 0);
+
+  if (scene && !routeGroup.parent) {
+    scene.add(routeGroup);
   }
 
   routeGroup.visible = true;
@@ -365,18 +369,10 @@ export function tickARRouteAlign() {
 
   if (arMode === 'camera-debug') {
     anchorRouteCameraDebug(routeState.routeGroup, camera, routeState, scene);
-  } else if (routeState.hasOutdoorSegment) {
+  } else {
     anchorRouteToSceneAnchor(routeState.routeGroup, routeState, scene, {
       instruction: 'Follow the green route on the ground'
     });
-  } else {
-    anchorRouteToCurrentCamera(
-      routeState.routeGroup,
-      camera,
-      routeState,
-      scene,
-      { instruction: 'Follow the green route on the ground' }
-    );
   }
 
   routeState.onUpdate?.(routeState);
@@ -419,9 +415,10 @@ export function anchorRouteToSceneAnchor(routeGroup, routeState, scene, options 
   const lastWorld = routeState.routePointsWorld.at(-1);
 
   logRouteAlignment('indoorRouteProgress.js:anchorRouteToSceneAnchor', 'anchor-fixed AR align', {
-    hypothesisId: 'D',
+    hypothesisId: 'E',
     alignMode: 'anchor-fixed',
     hasOutdoorSegment: routeState.hasOutdoorSegment,
+    routeGroupParent: routeGroup.parent?.type || null,
     rotationY: routeGroup.rotation.y,
     localEnd: lastLocal ? { x: lastLocal.x, y: lastLocal.y, z: lastLocal.z } : null,
     worldEnd: lastWorld ? { x: lastWorld.x, y: lastWorld.y, z: lastWorld.z } : null,

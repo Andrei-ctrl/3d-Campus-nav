@@ -52,11 +52,19 @@ function findIndoorBridge(fromBuildingId, toBuildingId) {
   );
 }
 
-function planIndoorBridgeRoute(fromDestination, toDestination, indoorGraphs) {
-  const fromBuildingId = fromDestination.room?.buildingId;
-  const toBuildingId = toDestination.room?.buildingId;
+function planBridgeRouteBetweenBuildings({
+  fromEntranceId,
+  toEntranceId,
+  fromDestination,
+  toDestination,
+  indoorGraphs
+}) {
+  const fromBuildingId = fromDestination?.room?.buildingId
+    ?? getEntranceBuildingId(fromEntranceId);
+  const toBuildingId = toDestination?.room?.buildingId
+    ?? (toDestination?.type === 'building' ? toDestination.id : getEntranceBuildingId(toEntranceId));
 
-  if (!fromBuildingId || !toBuildingId) {
+  if (!fromBuildingId || !toBuildingId || fromBuildingId === toBuildingId) {
     return null;
   }
 
@@ -76,38 +84,47 @@ function planIndoorBridgeRoute(fromDestination, toDestination, indoorGraphs) {
   const fromBridgeNodeId = bridge.nodes[fromBuildingId];
   const toBridgeNodeId = bridge.nodes[toBuildingId];
 
-  const exitPath = findShortestPath(
-    fromGraph,
-    fromDestination.room.indoorNodeId,
-    fromBridgeNodeId
-  );
-  const entryPath = findShortestPath(
-    toGraph,
-    toBridgeNodeId,
-    toDestination.room.indoorNodeId
-  );
+  const sourceStartId = fromDestination?.type === 'room'
+    ? fromDestination.room.indoorNodeId
+    : fromEntranceId;
+  const destEndId = toDestination?.type === 'room'
+    ? toDestination.room.indoorNodeId
+    : toEntranceId;
 
-  if (!exitPath.length || !entryPath.length) {
+  const sourcePath = findShortestPath(fromGraph, sourceStartId, fromBridgeNodeId);
+  const destPath = findShortestPath(toGraph, toBridgeNodeId, destEndId);
+
+  if (!sourcePath.length || !destPath.length) {
     return null;
   }
 
   const distance =
-    calculateIndoorRouteDistance(fromGraph, exitPath) +
+    calculateIndoorRouteDistance(fromGraph, sourcePath) +
     bridge.cost +
-    calculateIndoorRouteDistance(toGraph, entryPath);
+    calculateIndoorRouteDistance(toGraph, destPath);
 
   return {
     mode: 'indoor-bridge',
     outdoorPath: [],
     outdoorDistance: 0,
     indoorSegments: [
-      { buildingId: fromBuildingId, graph: fromGraph, path: exitPath },
-      { buildingId: toBuildingId, graph: toGraph, path: entryPath }
+      { buildingId: fromBuildingId, graph: fromGraph, path: sourcePath },
+      { buildingId: toBuildingId, graph: toGraph, path: destPath }
     ],
-    indoorPath: [...exitPath, ...entryPath.slice(1)],
+    indoorPath: [...sourcePath, ...destPath.slice(1)],
     distance,
     note: 'Route via indoor passage between buildings.'
   };
+}
+
+function planIndoorBridgeRoute(fromDestination, toDestination, indoorGraphs) {
+  return planBridgeRouteBetweenBuildings({
+    fromEntranceId: getEntranceIdForDestination(fromDestination),
+    toEntranceId: getEntranceIdForDestination(toDestination),
+    fromDestination,
+    toDestination,
+    indoorGraphs
+  });
 }
 
 function planIndoorFromEntranceToRoom(fromEntranceId, toDestination, indoorGraphs) {
@@ -190,6 +207,20 @@ export function planCrossBuildingRoute(fromDestination, toDestination, indoorGra
 
   if (!fromIsRoom && toIsRoom && fromBuildingId && fromBuildingId === toBuildingId) {
     return planIndoorFromEntranceToRoom(fromEntranceId, toDestination, indoorGraphs);
+  }
+
+  if (fromBuildingId && toBuildingId && fromBuildingId !== toBuildingId) {
+    const bridgeRoute = planBridgeRouteBetweenBuildings({
+      fromEntranceId,
+      toEntranceId,
+      fromDestination: fromIsRoom ? fromDestination : null,
+      toDestination: toIsRoom || toDestination.type === 'building' ? toDestination : null,
+      indoorGraphs
+    });
+
+    if (bridgeRoute) {
+      return { ok: true, ...bridgeRoute };
+    }
   }
 
   if (fromIsRoom && toIsRoom) {
