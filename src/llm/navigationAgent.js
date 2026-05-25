@@ -4,9 +4,57 @@ export function normalizeNavigationText(text) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\w\s]/g, ' ')
-    .replace(/\b([a-g])\s+([12][34]0)\b/g, '$1$2')
+    .replace(/\bo\s+o\s+p\b/g, 'oop')
+    .replace(/\bp\s+o\s+o\b/g, 'poo')
+    .replace(/\b([a-h])\s+([12][34]0)\b/g, '$1$2')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function scoreAliasMatch(normalizedText, alias, destination) {
+  if (!alias || !normalizedText) {
+    return 0;
+  }
+
+  let score = 0;
+
+  if (normalizedText === alias) {
+    score = 1000 + alias.length;
+  } else if (normalizedText.includes(alias)) {
+    score = 800 + alias.length;
+  } else if (alias.includes(normalizedText) && normalizedText.length >= 3) {
+    score = 700 + normalizedText.length;
+  } else if (normalizedText.length >= 2) {
+    const wordPattern = new RegExp(`\\b${escapeRegExp(normalizedText)}\\b`);
+
+    if (wordPattern.test(alias)) {
+      score = 650 + normalizedText.length;
+    } else {
+      const userTokens = normalizedText.split(' ').filter((token) => token.length >= 3);
+
+      if (userTokens.length > 0) {
+        const matchedTokens = userTokens.filter((token) =>
+          alias.split(' ').some((aliasToken) =>
+            aliasToken.includes(token) || token.includes(aliasToken)
+          )
+        );
+
+        if (matchedTokens.length === userTokens.length) {
+          score = 500 + matchedTokens.join('').length;
+        }
+      }
+    }
+  }
+
+  if (score > 0 && destination.type === 'room') {
+    score += 100;
+  }
+
+  return score;
 }
 
 function createDestinationAliases(destination) {
@@ -51,14 +99,13 @@ export function findDestinationByText(text, destinations) {
 
   destinations.forEach((destination) => {
     createDestinationAliases(destination).forEach((alias) => {
-      if (!alias || !normalizedText.includes(alias)) return;
+      const score = scoreAliasMatch(normalizedText, alias, destination);
 
-      const exactBoost = normalizedText === alias ? 1000 : 0;
-      const roomBoost = destination.type === 'room' ? 500 : 0;
+      if (score <= 0) return;
 
       matches.push({
         destination,
-        score: exactBoost + roomBoost + alias.length
+        score
       });
     });
   });
@@ -70,6 +117,7 @@ export function findDestinationByText(text, destinations) {
 
 function stripDestinationCommand(text) {
   return normalizeNavigationText(text)
+    .replace(/^(?:please\s+)?(?:go to|take me to|navigate to|show me the way to|route to|find|bring me to|directions to)\s+/, '')
     .replace(/^go to /, '')
     .replace(/^i want to go to /, '')
     .replace(/^i wanna go to /, '')
@@ -81,6 +129,8 @@ function stripDestinationCommand(text) {
     .replace(/^show me the way to /, '')
     .replace(/^route to /, '')
     .replace(/^find /, '')
+    .replace(/^my class(?: is)?\s+/, '')
+    .replace(/^class(?: is)?\s+/, '')
     .trim();
 }
 

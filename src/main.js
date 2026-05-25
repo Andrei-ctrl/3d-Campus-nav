@@ -2,8 +2,13 @@ import * as THREE from 'three';
 
 import { isARSupported, startARSession } from './ar/arSession.js';
 import { renderARRoute, clearARRoute, setARRouteVisible } from './ar/arRouteRenderer.js';
+import {
+  clearIndoorARRoute,
+  prepareIndoorARRoute,
+  updateRouteProgress
+} from './ar/indoorRouteProgress.js';
 import { convertRouteToAnchorRelative } from './ar/arRouteAdapter.js';
-import { anchors } from './data/anchors.js';
+import { anchors, getAnchorById, getAnchorForEntranceId } from './data/anchors.js';
 
 import { createRoomMarkers } from './scene/createIndoorMarkers.js';
 import { per21IndoorGraph } from './data/per21IndoorGraph.js';
@@ -14,31 +19,55 @@ import { createPer17IndoorStructure } from './scene/createPer17IndoorStructure.j
 import { createPer22IndoorStructure } from './scene/createPer22IndoorStructure.js';
 import {
   renderIndoorRoute,
+  renderIndoorRouteSegments,
   clearIndoorRoute,
   setIndoorRouteVisible,
-  setIndoorRouteBuildingVisible
+  setIndoorRouteBuildingVisible,
+  setIndoorRouteCalibrationHook
 } from './navigation/indoorRouteRenderer.js';
+import { planCrossBuildingRoute } from './navigation/campusRoute.js';
+import {
+  applySceneCalibration,
+  enterARCalibrationView,
+  exitARCalibrationView,
+  getSceneCalibration,
+  registerCalibratedObject,
+  registerCalibratedObjects,
+  unregisterCalibratedObject
+} from './scene/sceneCalibration.js';
+import { createCalibrationPanel } from './ui/calibrationPanel.js';
+import { createOutdoorTrackingPanel } from './ui/outdoorTrackingPanel.js';
+import { createARRouteProgressPanel } from './ui/arRouteProgressPanel.js';
 
 import { rooms } from './data/rooms.js';
-import { destinations } from './data/destinations.js';
+import { createDestinations } from './data/destinations.js';
+import { loadCampusTimetable } from './data/timetableLoader.js';
 import { pedestrianPaths } from './data/pedestrianPaths.js';
 import { createPedestrianPaths } from './scene/createPedestrianPaths.js';
 import { graph } from './data/graph.js';
 import { findShortestPath } from './navigation/dijkstra.js';
 
 import { resolveNavigationCommand } from './llm/navigationAgent.js';
-
+import { createRouteControls } from './ui/controls.js';
+import { makeWidgetDraggable, setupWidget, createUIVisibilityToggle } from './ui/widgets.js';
 import {
   renderRoute,
   clearRoute,
   setRouteVisible,
-  calculateRouteDistance
+  calculateRouteDistance,
+  setRouteCalibrationHook
 } from './navigation/routeRenderer.js';
 
+const navigationState = {
+  destinations: createDestinations(rooms),
+  timetableMeta: null
+};
 
+function getDestinations() {
+  return navigationState.destinations;
+}
 
-import { createRouteControls } from './ui/controls.js';
-import { makeWidgetDraggable, setupWidget } from './ui/widgets.js';
+let routeControls = null;
 
 import {
   createScene,
@@ -57,6 +86,7 @@ import {
 
 import { buildings } from './data/buildings.js';
 import { entrances } from './data/entrances.js';
+import { getEntrancePosition } from './data/entranceUtils.js';
 import { createEntrances } from './scene/createEntrances.js';
 
 // Initialize scene
@@ -89,7 +119,10 @@ const indoorGraphs = {
 const per21IndoorStructureMeshes = createPer21IndoorStructure(scene);
 const per22IndoorStructureMeshes = createPer22IndoorStructure(scene);
 const per17IndoorStructureMeshes = createPer17IndoorStructure(scene);
-const indoorMarkerMeshes = createRoomMarkers(scene, rooms, indoorGraphs);
+const indoorMarkerMeshes = createRoomMarkers(scene, rooms, indoorGraphs, {
+  navigationMarkerBuildings: ['PER21'],
+  roomMarkerIdsByBuilding: { PER22: ['PER22_LIBRARY'] }
+});
 
 const per21IndoorMeshes = [
   ...per21IndoorStructureMeshes,
@@ -111,77 +144,110 @@ let isPer22IndoorLayerVisible = true;
 let isPer17IndoorLayerVisible = true;
 let areBuildingsVisible = true;
 let areRoutesVisible = true;
+let areLabelsVisible = true;
 let areBuildingsTransparent = false;
 let latestOutdoorPath = [];
 let latestAnchor = null;
+let latestToDestination = null;
+let latestHasIndoorLeg = false;
+let latestIndoorARRoute = null;
+let outdoorTrackingPanel = null;
+let arRouteProgressPanel = null;
+let indoorARRouteState = null;
+let isARSessionRunning = false;
 let arDebugCube = null;
 
-const defaultARCalibration = {
-  scale: 0.05,
-  x: 0,
-  y: -0.45,
-  z: -1.5,
-  mode: 'anchor-relative'
-};
-
-let arCalibration = loadARCalibration();
-
-function loadARCalibration() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('arCalibration') || '{}');
-
-    return {
-      ...defaultARCalibration,
-      ...saved
-    };
-  } catch (error) {
-    console.warn('Could not load AR calibration:', error);
-    return { ...defaultARCalibration };
+function buildIndoorARRoute(routePlan, toDestination, fromEntranceId = null) {
+  if (!toDestination || toDestination.type !== 'room') {
+    return null;
   }
+
+  const segments = routePlan.indoorSegments ?? [];
+  let pathNodeIds = null;
+  let graph = null;
+  let buildingId = toDestination.room.buildingId;
+
+  const destinationSegment = segments.find(
+    (segment) => segment.path?.[segment.path.length - 1] === toDestination.room.indoorNodeId
+  );
+
+  if (destinationSegment?.path?.length >= 2) {
+    pathNodeIds = destinationSegment.path;
+    graph = destinationSegment.graph;
+    buildingId = destinationSegment.buildingId;
+  } else if ((routePlan.indoorPath?.length ?? 0) >= 2) {
+    pathNodeIds = routePlan.indoorPath;
+    graph = indoorGraphs[buildingId];
+  }
+
+  if (!graph || !pathNodeIds || pathNodeIds.length < 2) {
+    return null;
+  }
+
+  const entranceNodeId = pathNodeIds[0];
+  const entranceNode = graph.nodes[entranceNodeId];
+  const anchorPosition = entranceNode
+    ? { x: entranceNode.x, z: entranceNode.z }
+    : getEntrancePosition(fromEntranceId ?? latestAnchor?.entranceId ?? entranceNodeId);
+
+  if (!anchorPosition) {
+    return null;
+  }
+
+  return {
+    graph,
+    pathNodeIds,
+    buildingId,
+    destinationName: toDestination.room.name,
+    anchorPosition,
+    entranceNodeId
+  };
 }
 
-function saveARCalibration() {
-  localStorage.setItem('arCalibration', JSON.stringify(arCalibration));
+function clearIndoorARRouteState() {
+  indoorARRouteState = clearIndoorARRoute(scene, indoorARRouteState);
+  arRouteProgressPanel?.reset?.();
 }
 
-function applyAnchorRelativeCampusTransform(anchor, calibration = arCalibration) {
-  if (!anchor) return;
+function storeLatestRoutePlan(routePlan, toDestination, fromEntranceId = null) {
+  latestOutdoorPath = routePlan.outdoorPath ?? [];
+  latestToDestination = toDestination ?? null;
+  latestHasIndoorLeg = (routePlan.indoorPath?.length ?? 0) > 0
+    || (routePlan.indoorSegments?.length ?? 0) > 0;
+  latestIndoorARRoute = buildIndoorARRoute(routePlan, toDestination, fromEntranceId);
 
-  const scale = calibration.scale;
+  if (latestOutdoorPath.length >= 2) {
+    outdoorTrackingPanel?.startTracking?.();
+  } else {
+    outdoorTrackingPanel?.stopTracking?.();
+  }
 
-  campusARObjects.forEach((object) => {
-    if (!object) return;
-
-    const original = originalCampusTransforms.get(object);
-
-    if (!original) return;
-
-    object.position.set(
-      calibration.x + (original.position.x - anchor.position.x) * scale,
-      calibration.y + original.position.y * scale,
-      calibration.z - (original.position.z - anchor.position.z) * scale
-    );
-
-    object.scale.set(
-      original.scale.x * scale,
-      original.scale.y * scale,
-      original.scale.z * scale
-    );
-  });
+  outdoorTrackingPanel?.refreshUI?.();
+  arRouteProgressPanel?.setPrepared?.(!!latestIndoorARRoute);
 }
 
-function restoreCampusTransform() {
-  campusARObjects.forEach((object) => {
-    if (!object) return;
-
-    const original = originalCampusTransforms.get(object);
-
-    if (!original) return;
-
-    object.position.copy(original.position);
-    object.scale.copy(original.scale);
-  });
+function clearLatestRoutePlan() {
+  latestOutdoorPath = [];
+  latestToDestination = null;
+  latestHasIndoorLeg = false;
+  latestIndoorARRoute = null;
+  latestAnchor = null;
+  outdoorTrackingPanel?.stopTracking?.();
+  clearIndoorARRouteState();
 }
+
+function handleRouteCalibrationChange(action, mesh) {
+  if (action === 'register') {
+    registerCalibratedObject('routes', mesh);
+    applySceneCalibration();
+    return;
+  }
+
+  unregisterCalibratedObject(mesh);
+}
+
+setRouteCalibrationHook(handleRouteCalibrationChange);
+setIndoorRouteCalibrationHook(handleRouteCalibrationChange);
 
 function showARWorldDebugCube() {
   if (arDebugCube) {
@@ -219,6 +285,7 @@ function setIndoorLayerVisible(visible) {
     mesh.visible = visible;
   });
 
+  syncLabelLayerVisibility();
   setIndoorRouteBuildingVisible('PER21', visible);
 }
 
@@ -229,6 +296,7 @@ function setPer17IndoorLayerVisible(visible) {
     mesh.visible = visible;
   });
 
+  syncLabelLayerVisibility();
   setIndoorRouteBuildingVisible('PER17', visible);
 }
 
@@ -239,6 +307,7 @@ function setPer22IndoorLayerVisible(visible) {
     mesh.visible = visible;
   });
 
+  syncLabelLayerVisibility();
   setIndoorRouteBuildingVisible('PER22', visible);
 }
 
@@ -248,10 +317,35 @@ function setBuildingLayerVisible(visible) {
   Object.values(buildingMeshes).forEach((mesh) => {
     mesh.visible = visible;
   });
+}
 
-  Object.values(entranceMeshes).forEach((mesh) => {
-    mesh.visible = visible;
+function isLabelObject(object) {
+  return object.userData?.type === 'entrance-label' ||
+    object.userData?.type === 'indoor-room-label';
+}
+
+function isLabelSourceLayerVisible(object) {
+  const layer = object.userData?.layer;
+  const buildingId = object.userData?.buildingId;
+
+  if (layer === 'per21-indoor' || buildingId === 'PER21') return isIndoorLayerVisible;
+  if (layer === 'per22-indoor' || buildingId === 'PER22') return isPer22IndoorLayerVisible;
+  if (layer === 'per17-indoor' || buildingId === 'PER17') return isPer17IndoorLayerVisible;
+
+  return true;
+}
+
+function syncLabelLayerVisibility() {
+  scene.traverse((object) => {
+    if (!isLabelObject(object)) return;
+
+    object.visible = areLabelsVisible && isLabelSourceLayerVisible(object);
   });
+}
+
+function setLabelLayerVisible(visible) {
+  areLabelsVisible = visible;
+  syncLabelLayerVisibility();
 }
 
 function setBuildingTransparency(enabled) {
@@ -280,88 +374,109 @@ const mainRoad = createMeasuredRoad(scene);
 const mensaPer17Road = createMensaPer17Road(scene);
 const pedestrianPathMeshes = createPedestrianPaths(scene, pedestrianPaths);
 
-
-const campusARObjects = [
+registerCalibratedObjects('buildings', [
   ...Object.values(buildingMeshes),
-  ...Object.values(entranceMeshes),
-  ...per21IndoorStructureMeshes,
-  ...per22IndoorStructureMeshes,
-  ...per17IndoorStructureMeshes,
-  ...indoorMarkerMeshes,
-  mainRoad,
-  mensaPer17Road,
-  ...pedestrianPathMeshes
-];
+  ...Object.values(entranceMeshes)
+]);
+registerCalibratedObjects('per21Indoor', per21IndoorStructureMeshes);
+registerCalibratedObjects('per22Indoor', per22IndoorStructureMeshes);
+registerCalibratedObjects('per17Indoor', per17IndoorStructureMeshes);
+registerCalibratedObjects('markers', indoorMarkerMeshes);
+registerCalibratedObjects('paths', [mainRoad, mensaPer17Road, ...pedestrianPathMeshes]);
 
-const originalCampusTransforms = new Map();
+if (ground) {
+  registerCalibratedObjects('ground', [ground]);
+}
 
-campusARObjects.forEach((object) => {
-  if (!object) return;
+applySceneCalibration();
 
-  originalCampusTransforms.set(object, {
-    position: object.position.clone(),
-    scale: object.scale.clone()
-  });
-});
-// test pathfinding and route rendering
-createRouteControls(
-  anchors,
-  destinations,
+function initializeRouteControls() {
+  routeControls = createRouteControls(
+    anchors,
+    getDestinations,
 
-  // Show Route button
-  (anchorId, toDestinationId) => {
-    const fromEntranceId = getAnchorEntranceId(anchorId);
+    // Show Route button
+    (anchorId, toDestinationId) => {
+      const fromEntranceId = getAnchorEntranceId(anchorId);
 
-    if (!fromEntranceId) return;
+      if (!fromEntranceId) {
+        console.error(`Anchor not found: ${anchorId}`);
+        return;
+      }
 
-    showRouteFromEntrance(fromEntranceId, toDestinationId);
-  },
+      showRouteFromEntrance(fromEntranceId, toDestinationId);
+    },
 
-  // Clear Route button
-  () => {
-  clearRoute(scene);
-  clearIndoorRoute(scene);
-  clearARRoute(scene);
-  hideRouteInfo();
+    // Clear Route button
+    () => {
+      clearRoute(scene);
+      clearIndoorRoute(scene);
+      clearARRoute(scene);
+      hideRouteInfo();
+      clearLatestRoutePlan();
+    },
 
-  latestOutdoorPath = [];
-  latestAnchor = null;
-  },
+    // Run Command button
+    (anchorId, commandText) => {
+      const fromEntranceId = getAnchorEntranceId(anchorId);
 
-  // Run Command button
-  (anchorId, commandText) => {
-    const fromEntranceId = getAnchorEntranceId(anchorId);
+      if (!fromEntranceId) return;
 
-    if (!fromEntranceId) return;
+      const result = resolveNavigationCommand(commandText, getDestinations());
 
-    const result = resolveNavigationCommand(commandText, destinations);
+      if (!result.success) {
+        alert(result.error);
+        return;
+      }
 
-    if (!result.success) {
-      alert(result.error);
-      return;
+      if (result.fromDestinationId) {
+        showRoute(result.fromDestinationId, result.toDestinationId);
+      } else {
+        showRouteFromEntrance(fromEntranceId, result.toDestinationId);
+      }
     }
+  );
+}
 
-    if (result.fromDestinationId) {
-      showRoute(result.fromDestinationId, result.toDestinationId);
-    } else {
-      showRouteFromEntrance(fromEntranceId, result.toDestinationId);
+async function bootstrapNavigation() {
+  try {
+    const timetableData = await loadCampusTimetable(rooms);
+    navigationState.destinations = createDestinations(rooms, timetableData);
+    navigationState.timetableMeta = {
+      courseCount: timetableData.courseCount,
+      mappedCourseCount: timetableData.mappedCourseCount,
+      unmappedCourseCount: timetableData.unmappedCourses.length
+    };
+
+    console.info(
+      `Timetable loaded: ${timetableData.mappedCourseCount}/${timetableData.courseCount} courses mapped to campus rooms.`
+    );
+
+    if (timetableData.unmappedCourses.length > 0) {
+      console.warn('Unmapped timetable courses:', timetableData.unmappedCourses);
     }
+  } catch (error) {
+    console.warn('Could not load timetable Excel file. Course commands may be limited.', error);
+    navigationState.timetableMeta = {
+      courseCount: 0,
+      mappedCourseCount: 0,
+      unmappedCourseCount: 0,
+      error: error.message
+    };
   }
-);
+
+  initializeRouteControls();
+  routeControls?.updateDestinations?.(getDestinations(), navigationState.timetableMeta);
+}
+
+bootstrapNavigation();
 
 function getAnchorEntranceId(anchorId) {
-  const anchor = anchors.find((item) => item.id === anchorId);
-
-  if (!anchor) {
-    console.error(`Anchor not found: ${anchorId}`);
-    return null;
-  }
-
-  return anchor.entranceId;
+  return getAnchorById(anchorId)?.entranceId ?? null;
 }
 
 function getDefaultEntranceId(destinationId) {
-  const destination = destinations.find((item) => item.id === destinationId);
+  const destination = getDestinations().find((item) => item.id === destinationId);
 
   if (!destination) {
     console.error(`Destination not found: ${destinationId}`);
@@ -377,41 +492,9 @@ function getIndoorGraphForDestination(destination) {
   return buildingId ? indoorGraphs[buildingId] : null;
 }
 
-function renderDestinationIndoorRoute(destination) {
-  if (destination?.type !== 'room') {
-    return {
-      path: [],
-      note: ''
-    };
-  }
-
-  const indoorGraph = getIndoorGraphForDestination(destination);
-  const buildingId = destination.room.buildingId;
-
-  if (!indoorGraph) {
-    return {
-      path: [],
-      note: 'Indoor graph not available.'
-    };
-  }
-
-  const indoorPath = findShortestPath(
-    indoorGraph,
-    destination.room.nearestEntranceId,
-    destination.room.indoorNodeId
-  );
-
-  renderIndoorRoute(scene, indoorGraph, indoorPath, { buildingId });
-
-  return {
-    path: indoorPath,
-    note: ''
-  };
-}
-
 function showRoute(fromDestinationId, toDestinationId) {
-  const fromDestination = destinations.find((item) => item.id === fromDestinationId);
-  const toDestination = destinations.find((item) => item.id === toDestinationId);
+  const fromDestination = getDestinations().find((item) => item.id === fromDestinationId);
+  const toDestination = getDestinations().find((item) => item.id === toDestinationId);
 
   if (!fromDestination || !toDestination) {
     console.error("Start or destination not found.");
@@ -443,6 +526,11 @@ function showRoute(fromDestinationId, toDestinationId) {
       toDestination.room.indoorNodeId
     );
 
+    if (!indoorPath.length) {
+      displayRouteInfo([], 0, fromDestination, toDestination, [], 'No indoor path found.');
+      return;
+    }
+
     console.log("Indoor room-to-room route:", indoorPath);
 
     renderIndoorRoute(scene, indoorGraph, indoorPath, {
@@ -458,30 +546,40 @@ function showRoute(fromDestinationId, toDestinationId) {
       ''
     );
 
+    storeLatestRoutePlan(
+      { outdoorPath: [], indoorPath },
+      toDestination,
+      fromDestination.room?.nearestEntranceId
+    );
     return;
   }
 
-  // TODO: Add full room -> source indoor exit -> outdoor -> destination indoor routing.
-  // For now, different-building room routes start outdoors at the source nearest entrance.
-  const fromId = getDefaultEntranceId(fromDestinationId);
-  const toId = getDefaultEntranceId(toDestinationId);
+  const routePlan = planCrossBuildingRoute(fromDestination, toDestination, indoorGraphs);
 
-  if (!fromId || !toId) return;
+  if (!routePlan.ok) {
+    displayRouteInfo([], 0, fromDestination, toDestination, [], routePlan.error);
+    return;
+  }
 
-  const path = findShortestPath(graph, fromId, toId);
-  const distance = calculateRouteDistance(graph, path);
+  if (routePlan.outdoorPath.length > 0) {
+    renderRoute(scene, graph, routePlan.outdoorPath);
+  }
 
-  renderRoute(scene, graph, path);
-
-  const indoorRoute = renderDestinationIndoorRoute(toDestination);
+  renderIndoorRouteSegments(scene, routePlan.indoorSegments);
 
   displayRouteInfo(
-    path,
-    distance,
+    routePlan.outdoorPath,
+    routePlan.outdoorDistance,
     fromDestination,
     toDestination,
-    indoorRoute.path,
-    indoorRoute.note
+    routePlan.indoorPath,
+    routePlan.note
+  );
+
+  storeLatestRoutePlan(
+    routePlan,
+    toDestination,
+    fromDestination.defaultEntranceId ?? fromDestination.room?.nearestEntranceId
   );
 }
 
@@ -493,7 +591,7 @@ function showRouteFromEntrance(fromEntranceId, toDestinationId) {
     defaultEntranceId: fromEntranceId
   };
 
-  const toDestination = destinations.find((item) => item.id === toDestinationId);
+  const toDestination = getDestinations().find((item) => item.id === toDestinationId);
 
   if (!toDestination) {
     console.error(`Destination not found: ${toDestinationId}`);
@@ -503,48 +601,50 @@ function showRouteFromEntrance(fromEntranceId, toDestinationId) {
   clearRoute(scene);
   clearIndoorRoute(scene);
 
-  const toId = getDefaultEntranceId(toDestinationId);
+  const routePlan = planCrossBuildingRoute(fromDestination, toDestination, indoorGraphs);
 
-  if (!toId) return;
+  if (!routePlan.ok) {
+    displayRouteInfo([], 0, fromDestination, toDestination, [], routePlan.error);
+    return;
+  }
 
-  const path = findShortestPath(graph, fromEntranceId, toId);
-  const distance = calculateRouteDistance(graph, path);
-
-  latestOutdoorPath = path;
-  latestAnchor = anchors.find((anchor) => anchor.entranceId === fromEntranceId) || null;
+  latestOutdoorPath = routePlan.outdoorPath;
+  latestAnchor = getAnchorForEntranceId(fromEntranceId);
 
   console.log('Latest outdoor path:', latestOutdoorPath);
   console.log('Latest anchor:', latestAnchor);
 
-  const selectedAnchor = anchors.find((anchor) => anchor.entranceId === fromEntranceId);
+  const selectedAnchor = latestAnchor;
 
-  if (selectedAnchor) {
+  if (selectedAnchor && routePlan.outdoorPath.length > 0) {
     const arRelativeRoute = convertRouteToAnchorRelative(
       graph,
-      path,
+      routePlan.outdoorPath,
       selectedAnchor.position
     );
 
     console.log('Selected anchor:', selectedAnchor);
-    console.log('Normal map route:', path);
+    console.log('Normal map route:', routePlan.outdoorPath);
     console.table(arRelativeRoute);
   }
 
-  renderRoute(scene, graph, path);
+  if (routePlan.outdoorPath.length > 0) {
+    renderRoute(scene, graph, routePlan.outdoorPath);
+  }
 
-  const indoorRoute = renderDestinationIndoorRoute(toDestination);
+  renderIndoorRouteSegments(scene, routePlan.indoorSegments);
 
   displayRouteInfo(
-    path,
-    distance,
+    routePlan.outdoorPath,
+    routePlan.outdoorDistance,
     fromDestination,
     toDestination,
-    indoorRoute.path,
-    indoorRoute.note
+    routePlan.indoorPath,
+    routePlan.note
   );
-}
 
-// Collect all interactive objects for raycasting
+  storeLatestRoutePlan(routePlan, toDestination, fromEntranceId);
+}
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let selectedObject = null;
@@ -771,7 +871,10 @@ async function createARButton() {
 
   button.addEventListener('click', async () => {
   try {
-    if (!latestAnchor || !Array.isArray(latestOutdoorPath) || latestOutdoorPath.length < 2) {
+    const hasOutdoorRoute = latestAnchor && latestOutdoorPath.length >= 2;
+    const hasIndoorRoute = !!latestIndoorARRoute;
+
+    if (!hasOutdoorRoute && !hasIndoorRoute) {
       alert('Please select a current location and click Show Route before starting AR.');
       button.textContent = 'Start AR';
       return;
@@ -779,39 +882,57 @@ async function createARButton() {
 
     button.textContent = 'Starting AR...';
 
+    clearIndoorARRouteState();
+    clearARRoute(scene);
+
     const session = await startARSession(renderer);
 
-   // showARWorldDebugCube();
+    isARSessionRunning = true;
 
     enterARViewMode();
-    applyAnchorRelativeCampusTransform(latestAnchor, arCalibration);
+    enterARCalibrationView(latestAnchor);
 
-   renderARRoute(
-      scene,
-      graph,
-      latestOutdoorPath,
-      latestAnchor.position,
-      {
-        scale: arCalibration.scale,
-        camera,
-        cameraRelative: arCalibration.mode === 'camera-debug',
-        originOffset: {
-          x: arCalibration.x,
-          y: arCalibration.y,
-          z: arCalibration.z
+    if (hasIndoorRoute) {
+      indoorARRouteState = prepareIndoorARRoute(scene, latestIndoorARRoute, {
+        onUpdate: (state) => arRouteProgressPanel?.refreshUI?.(state),
+        onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
+      });
+      arRouteProgressPanel?.setPrepared?.(true);
+      arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
+    } else if (hasOutdoorRoute) {
+      const calibration = getSceneCalibration();
+
+      renderARRoute(
+        scene,
+        graph,
+        latestOutdoorPath,
+        latestAnchor.position,
+        {
+          scale: calibration.arScale,
+          camera,
+          cameraRelative: calibration.mode === 'camera-debug',
+          originOffset: {
+            x: calibration.arOffsetX,
+            y: calibration.arOffsetY,
+            z: calibration.arOffsetZ
+          }
         }
-      }
-    );
+      );
+    }
 
     session.addEventListener('end', () => {
-      restoreCampusTransform();
+      isARSessionRunning = false;
+      clearIndoorARRouteState();
+      exitARCalibrationView();
       exitARViewMode();
       button.textContent = 'Start AR';
+      arRouteProgressPanel?.reset?.();
     });
 
     button.textContent = 'AR Running';
   } catch (error) {
     console.error(error);
+    isARSessionRunning = false;
     alert(error.message);
     button.textContent = 'Start AR';
   }
@@ -862,135 +983,13 @@ function createLayerToggles() {
     content.appendChild(row);
   };
 
-  createCheckbox('show-buildings-layer', 'Buildings + labels', areBuildingsVisible, setBuildingLayerVisible);
+  createCheckbox('show-buildings-layer', 'Buildings', areBuildingsVisible, setBuildingLayerVisible);
+  createCheckbox('show-labels-layer', 'Labels', areLabelsVisible, setLabelLayerVisible);
   createCheckbox('transparent-buildings-layer', 'Transparent buildings', areBuildingsTransparent, setBuildingTransparency);
   createCheckbox('show-routes-layer', 'Green/blue route lines', areRoutesVisible, setRouteLayerVisible);
   createCheckbox('show-indoor-layer', 'PER21 interior objects', isIndoorLayerVisible, setIndoorLayerVisible);
   createCheckbox('show-per22-indoor-layer', 'PER22 interior objects', isPer22IndoorLayerVisible, setPer22IndoorLayerVisible);
   createCheckbox('show-per17-indoor-layer', 'PER17 interior objects', isPer17IndoorLayerVisible, setPer17IndoorLayerVisible);
-
-  container.appendChild(header);
-  container.appendChild(content);
-  document.getElementById('ui').appendChild(container);
-  setupWidget(container, {
-    header,
-    content
-  });
-}
-
-function createARCalibrationPanel() {
-  const container = document.createElement('div');
-  container.id = 'ar-calibration-panel';
-  container.className = 'ar-calibration-panel';
-
-  const header = document.createElement('div');
-  header.className = 'ar-calibration-header';
-
-  const title = document.createElement('h2');
-  title.textContent = 'AR Calibration';
-  header.appendChild(title);
-
-  const content = document.createElement('div');
-  content.className = 'ar-calibration-content';
-
-  const controls = {};
-
-  const modeLabel = document.createElement('label');
-  modeLabel.textContent = 'AR Mode';
-
-  const modeSelect = document.createElement('select');
-  modeSelect.id = 'ar-mode';
-
-  [
-    { value: 'camera-debug', text: 'Debug route in front of camera' },
-    { value: 'anchor-relative', text: 'Anchor-relative route' }
-  ].forEach((mode) => {
-    const option = document.createElement('option');
-    option.value = mode.value;
-    option.textContent = mode.text;
-    modeSelect.appendChild(option);
-  });
-
-  modeSelect.value = arCalibration.mode;
-  content.appendChild(modeLabel);
-  content.appendChild(modeSelect);
-
-  const addCalibrationControl = (key, label, min, max, step) => {
-    const row = document.createElement('div');
-    row.className = 'ar-calibration-row';
-
-    const controlLabel = document.createElement('label');
-    controlLabel.textContent = label;
-
-    const range = document.createElement('input');
-    range.type = 'range';
-    range.min = min;
-    range.max = max;
-    range.step = step;
-    range.value = arCalibration[key];
-
-    const number = document.createElement('input');
-    number.type = 'number';
-    number.min = min;
-    number.max = max;
-    number.step = step;
-    number.value = arCalibration[key];
-
-    range.addEventListener('input', () => {
-      number.value = range.value;
-    });
-
-    number.addEventListener('input', () => {
-      range.value = number.value;
-    });
-
-    row.appendChild(controlLabel);
-    row.appendChild(range);
-    row.appendChild(number);
-    content.appendChild(row);
-
-    controls[key] = { range, number };
-  };
-
-  addCalibrationControl('scale', 'Scale', 0.005, 0.2, 0.005);
-  addCalibrationControl('x', 'X offset', -5, 5, 0.05);
-  addCalibrationControl('y', 'Y offset', -3, 3, 0.05);
-  addCalibrationControl('z', 'Z offset', -6, 2, 0.05);
-
-  const applyButton = document.createElement('button');
-  applyButton.textContent = 'Apply AR Calibration';
-
-  const resetButton = document.createElement('button');
-  resetButton.textContent = 'Reset Calibration';
-
-  const applyValues = () => {
-    arCalibration = {
-      scale: Number(controls.scale.number.value),
-      x: Number(controls.x.number.value),
-      y: Number(controls.y.number.value),
-      z: Number(controls.z.number.value),
-      mode: modeSelect.value
-    };
-
-    saveARCalibration();
-  };
-
-  applyButton.addEventListener('click', applyValues);
-
-  resetButton.addEventListener('click', () => {
-    arCalibration = { ...defaultARCalibration };
-    modeSelect.value = arCalibration.mode;
-
-    Object.entries(controls).forEach(([key, control]) => {
-      control.range.value = arCalibration[key];
-      control.number.value = arCalibration[key];
-    });
-
-    saveARCalibration();
-  });
-
-  content.appendChild(applyButton);
-  content.appendChild(resetButton);
 
   container.appendChild(header);
   container.appendChild(content);
@@ -1055,8 +1054,22 @@ function exitARViewMode() {
 }
 
 setupStaticInfoPanel();
+createUIVisibilityToggle();
 createLayerToggles();
-createARCalibrationPanel();
+createCalibrationPanel({ anchors });
+outdoorTrackingPanel = createOutdoorTrackingPanel({
+  scene,
+  graph,
+  getOutdoorPath: () => latestOutdoorPath,
+  getDestination: () => latestToDestination,
+  getHasIndoorLeg: () => latestHasIndoorLeg
+});
+arRouteProgressPanel = createARRouteProgressPanel({
+  scene,
+  camera,
+  getRouteState: () => indoorARRouteState,
+  isARSessionActive: () => isARSessionRunning && renderer.xr.isPresenting
+});
 createARButton();
 
 // Keyboard zoom controls
@@ -1088,9 +1101,15 @@ window.addEventListener('keydown', (event) => {
 });
 // Animation loop
 function animate() {
-  controls.update();
+  if (!renderer.xr.isPresenting) {
+    controls.update();
+  }
+
+  if (renderer.xr.isPresenting && indoorARRouteState?.active) {
+    updateRouteProgress(camera, indoorARRouteState);
+  }
+
   renderer.render(scene, camera);
 }
 
 renderer.setAnimationLoop(animate);
-

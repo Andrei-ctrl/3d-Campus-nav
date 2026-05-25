@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getEntrancePosition } from '../data/entranceUtils.js';
 
 function createEntranceMarker(entrance) {
   const geometry = new THREE.ConeGeometry(3, 7, 24);
@@ -9,11 +10,12 @@ function createEntranceMarker(entrance) {
   });
 
   const marker = new THREE.Mesh(geometry, material);
+  const position = getEntrancePosition(entrance.id);
 
   marker.position.set(
-    entrance.position.x,
+    position.x,
     3.5,
-    entrance.position.z
+    position.z
   );
 
   marker.userData = {

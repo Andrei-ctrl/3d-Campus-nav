@@ -96,3 +96,38 @@ export function setupWidget(container, {
 
   return button;
 }
+
+let uiWidgetsVisible = true;
+
+export function areUIWidgetsVisible() {
+  return uiWidgetsVisible;
+}
+
+export function setUIWidgetsVisible(visible) {
+  uiWidgetsVisible = visible;
+
+  const ui = document.getElementById('ui');
+
+  if (ui) {
+    ui.classList.toggle('ui-widgets-hidden', !visible);
+  }
+}
+
+export function createUIVisibilityToggle() {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'ui-visibility-toggle';
+  button.textContent = 'Show/Hide';
+  button.title = 'Show or hide all UI panels';
+  button.setAttribute('aria-pressed', 'false');
+
+  button.addEventListener('click', () => {
+    setUIWidgetsVisible(!uiWidgetsVisible);
+    button.setAttribute('aria-pressed', uiWidgetsVisible ? 'false' : 'true');
+    button.title = uiWidgetsVisible ? 'Hide all UI panels' : 'Show all UI panels';
+  });
+
+  document.getElementById('ui')?.appendChild(button);
+
+  return button;
+}

@@ -1,0 +1,254 @@
+import { graph } from '../data/graph.js';
+import { findShortestPath } from './dijkstra.js';
+import { calculateRouteDistance } from './routeRenderer.js';
+
+const INDOOR_BUILDING_BRIDGES = [
+  {
+    id: 'PER22_PER21',
+    buildings: ['PER22', 'PER21'],
+    nodes: {
+      PER22: 'PER22_PER21_CONNECTION',
+      PER21: 'PER21_PER22_CONNECTION_ENTRANCE'
+    },
+    cost: 15
+  }
+];
+
+function calculateIndoorRouteDistance(indoorGraph, pathNodeIds) {
+  if (!pathNodeIds || pathNodeIds.length < 2) {
+    return 0;
+  }
+
+  let total = 0;
+
+  for (let i = 0; i < pathNodeIds.length - 1; i++) {
+    const startNode = indoorGraph.nodes[pathNodeIds[i]];
+    const endNode = indoorGraph.nodes[pathNodeIds[i + 1]];
+
+    if (!startNode || !endNode) continue;
+
+    const dx = endNode.x - startNode.x;
+    const dz = endNode.z - startNode.z;
+    const floorDelta = ((endNode.floor || 0) - (startNode.floor || 0)) * 3;
+
+    total += Math.sqrt(dx * dx + dz * dz + floorDelta * floorDelta);
+  }
+
+  return total;
+}
+
+function getEntranceIdForDestination(destination) {
+  return destination?.defaultEntranceId || null;
+}
+
+function findIndoorBridge(fromBuildingId, toBuildingId) {
+  return INDOOR_BUILDING_BRIDGES.find(
+    (bridge) =>
+      bridge.buildings.includes(fromBuildingId) &&
+      bridge.buildings.includes(toBuildingId) &&
+      fromBuildingId !== toBuildingId
+  );
+}
+
+function planIndoorBridgeRoute(fromDestination, toDestination, indoorGraphs) {
+  const fromBuildingId = fromDestination.room?.buildingId;
+  const toBuildingId = toDestination.room?.buildingId;
+
+  if (!fromBuildingId || !toBuildingId) {
+    return null;
+  }
+
+  const bridge = findIndoorBridge(fromBuildingId, toBuildingId);
+
+  if (!bridge) {
+    return null;
+  }
+
+  const fromGraph = indoorGraphs[fromBuildingId];
+  const toGraph = indoorGraphs[toBuildingId];
+
+  if (!fromGraph || !toGraph) {
+    return null;
+  }
+
+  const fromBridgeNodeId = bridge.nodes[fromBuildingId];
+  const toBridgeNodeId = bridge.nodes[toBuildingId];
+
+  const exitPath = findShortestPath(
+    fromGraph,
+    fromDestination.room.indoorNodeId,
+    fromBridgeNodeId
+  );
+  const entryPath = findShortestPath(
+    toGraph,
+    toBridgeNodeId,
+    toDestination.room.indoorNodeId
+  );
+
+  if (!exitPath.length || !entryPath.length) {
+    return null;
+  }
+
+  const distance =
+    calculateIndoorRouteDistance(fromGraph, exitPath) +
+    bridge.cost +
+    calculateIndoorRouteDistance(toGraph, entryPath);
+
+  return {
+    mode: 'indoor-bridge',
+    outdoorPath: [],
+    outdoorDistance: 0,
+    indoorSegments: [
+      { buildingId: fromBuildingId, graph: fromGraph, path: exitPath },
+      { buildingId: toBuildingId, graph: toGraph, path: entryPath }
+    ],
+    indoorPath: [...exitPath, ...entryPath.slice(1)],
+    distance,
+    note: 'Route via indoor passage between buildings.'
+  };
+}
+
+export function planCrossBuildingRoute(fromDestination, toDestination, indoorGraphs) {
+  if (!fromDestination || !toDestination) {
+    return {
+      ok: false,
+      error: 'Start or destination not found.'
+    };
+  }
+
+  const fromIsRoom = fromDestination.type === 'room';
+  const toIsRoom = toDestination.type === 'room';
+
+  const fromEntranceId = getEntranceIdForDestination(fromDestination);
+  const toEntranceId = getEntranceIdForDestination(toDestination);
+
+  if (!fromEntranceId || !toEntranceId) {
+    return {
+      ok: false,
+      error: 'Missing entrance for route planning.'
+    };
+  }
+
+  if (fromIsRoom && toIsRoom) {
+    const bridgeRoute = planIndoorBridgeRoute(fromDestination, toDestination, indoorGraphs);
+
+    if (bridgeRoute) {
+      const fromGraph = indoorGraphs[fromDestination.room.buildingId];
+      const toGraph = indoorGraphs[toDestination.room.buildingId];
+
+      const sourceExitPath = findShortestPath(
+        fromGraph,
+        fromDestination.room.indoorNodeId,
+        fromEntranceId
+      );
+      const outdoorPath = findShortestPath(graph, fromEntranceId, toEntranceId);
+      const destEntryPath = findShortestPath(
+        toGraph,
+        toEntranceId,
+        toDestination.room.indoorNodeId
+      );
+
+      const outdoorPlanDistance =
+        calculateIndoorRouteDistance(fromGraph, sourceExitPath) +
+        calculateRouteDistance(graph, outdoorPath) +
+        calculateIndoorRouteDistance(toGraph, destEntryPath);
+
+      const outdoorPlanOk =
+        sourceExitPath.length > 0 &&
+        outdoorPath.length > 0 &&
+        destEntryPath.length > 0;
+
+      if (!outdoorPlanOk || bridgeRoute.distance <= outdoorPlanDistance) {
+        return { ok: true, ...bridgeRoute };
+      }
+    }
+  }
+
+  const indoorSegments = [];
+  let sourceIndoorPath = [];
+
+  if (fromIsRoom) {
+    const fromGraph = indoorGraphs[fromDestination.room.buildingId];
+
+    if (!fromGraph) {
+      return { ok: false, error: 'Indoor graph not available for start room.' };
+    }
+
+    sourceIndoorPath = findShortestPath(
+      fromGraph,
+      fromDestination.room.indoorNodeId,
+      fromEntranceId
+    );
+
+    if (!sourceIndoorPath.length) {
+      return {
+        ok: false,
+        error: `No indoor path from ${fromDestination.room.name} to exit.`
+      };
+    }
+
+    indoorSegments.push({
+      buildingId: fromDestination.room.buildingId,
+      graph: fromGraph,
+      path: sourceIndoorPath
+    });
+  }
+
+  const outdoorPath = findShortestPath(graph, fromEntranceId, toEntranceId);
+
+  if (!outdoorPath.length) {
+    return {
+      ok: false,
+      error: `No outdoor path from ${fromEntranceId} to ${toEntranceId}.`
+    };
+  }
+
+  let destIndoorPath = [];
+
+  if (toIsRoom) {
+    const toGraph = indoorGraphs[toDestination.room.buildingId];
+
+    if (!toGraph) {
+      return { ok: false, error: 'Indoor graph not available for destination room.' };
+    }
+
+    destIndoorPath = findShortestPath(
+      toGraph,
+      toEntranceId,
+      toDestination.room.indoorNodeId
+    );
+
+    if (!destIndoorPath.length) {
+      return {
+        ok: false,
+        error: `No indoor path from entrance to ${toDestination.room.name}.`
+      };
+    }
+
+    indoorSegments.push({
+      buildingId: toDestination.room.buildingId,
+      graph: toGraph,
+      path: destIndoorPath
+    });
+  }
+
+  const outdoorDistance = calculateRouteDistance(graph, outdoorPath);
+  let indoorDistance = 0;
+
+  indoorSegments.forEach(({ graph: indoorGraph, path }) => {
+    indoorDistance += calculateIndoorRouteDistance(indoorGraph, path);
+  });
+
+  const indoorPath = [...sourceIndoorPath, ...destIndoorPath];
+
+  return {
+    ok: true,
+    mode: 'outdoor',
+    outdoorPath,
+    outdoorDistance,
+    indoorSegments,
+    indoorPath,
+    distance: outdoorDistance + indoorDistance,
+    note: ''
+  };
+}

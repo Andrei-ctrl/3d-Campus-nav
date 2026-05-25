@@ -2,6 +2,11 @@ import * as THREE from 'three';
 
 let currentRouteMeshes = [];
 let isRouteVisible = true;
+let onRouteMeshesChanged = null;
+
+export function setRouteCalibrationHook(callback) {
+  onRouteMeshesChanged = callback;
+}
 
 function createRouteSegment(start, end) {
   const dx = end.x - start.x;
@@ -39,6 +44,7 @@ function createRouteSegment(start, end) {
 
 export function clearRoute(scene) {
   currentRouteMeshes.forEach((mesh) => {
+    onRouteMeshesChanged?.('unregister', mesh);
     scene.remove(mesh);
 
     if (mesh.geometry) mesh.geometry.dispose();
@@ -72,8 +78,8 @@ export function renderRoute(scene, graph, pathNodeIds) {
 
     scene.add(segment);
     currentRouteMeshes.push(segment);
+    onRouteMeshesChanged?.('register', segment);
   }
-  
 }
 
 export function calculateRouteDistance(graph, pathNodeIds) {
