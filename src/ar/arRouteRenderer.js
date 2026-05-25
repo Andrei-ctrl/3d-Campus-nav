@@ -86,10 +86,13 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
   const cameraRelative = options.cameraRelative ?? false;
   const originOffset = options.originOffset ?? { x: 0, y: -0.45, z: -1.5 };
 
+  const arMirrorX = options.arMirrorX ?? -1;
+
   const relativeRoute = convertRouteToAnchorRelative(
     graph,
     pathNodeIds,
-    anchorPosition
+    anchorPosition,
+    { arSpace: true, arMirrorX }
   );
 
   const group = new THREE.Group();
@@ -118,7 +121,7 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
       id: point.id,
       x: originOffset.x + point.x * scale,
       y: originOffset.y,
-      z: originOffset.z - point.z * scale
+      z: originOffset.z + point.z * scale
     }));
   }
 

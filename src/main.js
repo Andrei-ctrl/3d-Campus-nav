@@ -156,6 +156,7 @@ let arRouteProgressPanel = null;
 let indoorARRouteState = null;
 let isARSessionRunning = false;
 let arDebugCube = null;
+const arHiddenMeshes = [];
 
 function buildIndoorARRoute(routePlan, toDestination, fromEntranceId = null) {
   if (!toDestination || toDestination.type !== 'room') {
@@ -893,32 +894,19 @@ async function createARButton() {
     enterARCalibrationView(latestAnchor);
 
     if (hasIndoorRoute) {
-      indoorARRouteState = prepareIndoorARRoute(scene, latestIndoorARRoute, {
+      const calibration = getSceneCalibration();
+
+      indoorARRouteState = prepareIndoorARRoute(scene, {
+        ...latestIndoorARRoute,
+        arOptions: { arMirrorX: calibration.arMirrorX ?? -1 }
+      }, {
         onUpdate: (state) => arRouteProgressPanel?.refreshUI?.(state),
         onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
       });
       arRouteProgressPanel?.setPrepared?.(true);
       arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
-    } else if (hasOutdoorRoute) {
-      const calibration = getSceneCalibration();
-
-      renderARRoute(
-        scene,
-        graph,
-        latestOutdoorPath,
-        latestAnchor.position,
-        {
-          scale: calibration.arScale,
-          camera,
-          cameraRelative: calibration.mode === 'camera-debug',
-          originOffset: {
-            x: calibration.arOffsetX,
-            y: calibration.arOffsetY,
-            z: calibration.arOffsetZ
-          }
-        }
-      );
     }
+    // Outdoor legs use the GPS tracking panel; skip the legacy floating route discs in AR.
 
     session.addEventListener('end', () => {
       isARSessionRunning = false;
@@ -1031,18 +1019,35 @@ function setupStaticInfoPanel() {
 }
 
 function enterARViewMode() {
-  // Hide only the large white ground plane
   if (ground) {
     ground.visible = false;
   }
 
-  // Remove non-transparent desktop background/fog during AR
   scene.background = null;
   scene.fog = null;
+
+  arHiddenMeshes.length = 0;
+
+  indoorMarkerMeshes.forEach((mesh) => {
+    if (mesh.visible) {
+      arHiddenMeshes.push(mesh);
+      mesh.visible = false;
+    }
+  });
+
+  [mainRoad, mensaPer17Road, ...pedestrianPathMeshes].forEach((mesh) => {
+    if (mesh?.visible) {
+      arHiddenMeshes.push(mesh);
+      mesh.visible = false;
+    }
+  });
+
+  setIndoorRouteVisible(false);
+  setRouteVisible(false);
+  clearARRoute(scene);
 }
 
 function exitARViewMode() {
-  // Restore normal desktop view
   if (ground) {
     ground.visible = true;
   }
@@ -1050,6 +1055,17 @@ function exitARViewMode() {
   scene.background = new THREE.Color(0xf7f7f4);
   scene.fog = new THREE.Fog(0xf7f7f4, 360, 620);
 
+  arHiddenMeshes.forEach((mesh) => {
+    mesh.visible = true;
+  });
+  arHiddenMeshes.length = 0;
+
+  setIndoorLayerVisible(isIndoorLayerVisible);
+  setPer22IndoorLayerVisible(isPer22IndoorLayerVisible);
+  setPer17IndoorLayerVisible(isPer17IndoorLayerVisible);
+  setBuildingLayerVisible(areBuildingsVisible);
+  setRouteLayerVisible(areRoutesVisible);
+  syncLabelLayerVisibility();
   clearARRoute(scene);
 }
 

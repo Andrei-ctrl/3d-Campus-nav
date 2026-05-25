@@ -21,6 +21,7 @@ export const defaultSceneCalibration = {
   arOffsetX: 0,
   arOffsetY: -0.45,
   arOffsetZ: -1.5,
+  arMirrorX: -1,
   mode: 'anchor-relative',
   livePreview: true
 };
@@ -182,14 +183,17 @@ function applyTransformToObject(object, calibration, options = {}) {
   if (options.anchor && isARActive) {
     const anchor = options.anchor.position;
     const arScale = calibration.arScale;
+    const arMirrorX = calibration.arMirrorX ?? -1;
+    const dx = original.position.x - anchor.x;
+    const dz = original.position.z - anchor.z;
 
     positionX =
       calibration.arOffsetX +
-      (original.position.x - anchor.x) * arScale * groupScale;
+      arMirrorX * dx * arScale * groupScale;
     positionY = calibration.arOffsetY + original.position.y * arScale * groupScale;
     positionZ =
       calibration.arOffsetZ -
-      (original.position.z - anchor.z) * arScale * groupScale;
+      dz * arScale * groupScale;
 
     scaleX = original.scale.x * arScale * groupScale;
     scaleY = original.scale.y * arScale * groupScale;
