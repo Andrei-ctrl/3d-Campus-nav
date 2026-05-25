@@ -10,9 +10,9 @@ export const buildings = [
     id: "PER21",
     name: "Pérolles 21",
     type: "Building",
-    description: "Main PER21 building, approx. 178m x 35m",
+    description: "Main PER21 building, approx. 132m x 38m based on the measured floor plan sketch",
     position: { x: 10, y: 0, z: 56 },
-    size: { length: 178, width: 35, height: 8 },
+    size: { length: 132, width: 38, height: 8 },
     rotationDeg: 0,
     color: "#0057b8"
   },
@@ -28,7 +28,8 @@ export const buildings = [
     attachedTo: "PER21",
     attachToEnd: "start",
     attachMode: "sideAtEnd",
-    attachSide: "right"
+    attachSide: "right",
+    sideInset: 7.5
   },
   {
     id: "MENSA",

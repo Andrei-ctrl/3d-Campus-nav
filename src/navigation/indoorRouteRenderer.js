@@ -3,6 +3,11 @@ import * as THREE from 'three';
 let currentIndoorRouteMeshes = [];
 let isIndoorRouteVisible = true;
 const indoorRouteBuildingVisibility = new Map();
+let onIndoorRouteMeshesChanged = null;
+
+export function setIndoorRouteCalibrationHook(callback) {
+  onIndoorRouteMeshesChanged = callback;
+}
 
 function isBuildingRouteVisible(buildingId) {
   return indoorRouteBuildingVisibility.get(buildingId) ?? true;
@@ -52,6 +57,7 @@ function createIndoorRouteSegment(start, end, options = {}) {
 
 export function clearIndoorRoute(scene) {
   currentIndoorRouteMeshes.forEach((mesh) => {
+    onIndoorRouteMeshesChanged?.('unregister', mesh);
     scene.remove(mesh);
 
     if (mesh.geometry) mesh.geometry.dispose();
@@ -79,9 +85,7 @@ export function setIndoorRouteBuildingVisible(buildingId, visible) {
   });
 }
 
-export function renderIndoorRoute(scene, indoorGraph, pathNodeIds, options = {}) {
-  clearIndoorRoute(scene);
-
+function addIndoorRouteSegments(scene, indoorGraph, pathNodeIds, options = {}) {
   if (!pathNodeIds || pathNodeIds.length < 2) {
     return;
   }
@@ -96,5 +100,19 @@ export function renderIndoorRoute(scene, indoorGraph, pathNodeIds, options = {})
 
     scene.add(segment);
     currentIndoorRouteMeshes.push(segment);
+    onIndoorRouteMeshesChanged?.('register', segment);
   }
+}
+
+export function renderIndoorRoute(scene, indoorGraph, pathNodeIds, options = {}) {
+  clearIndoorRoute(scene);
+  addIndoorRouteSegments(scene, indoorGraph, pathNodeIds, options);
+}
+
+export function renderIndoorRouteSegments(scene, segments = []) {
+  clearIndoorRoute(scene);
+
+  segments.forEach(({ graph: indoorGraph, path, buildingId }) => {
+    addIndoorRouteSegments(scene, indoorGraph, path, { buildingId });
+  });
 }

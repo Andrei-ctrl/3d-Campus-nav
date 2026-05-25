@@ -1,201 +1,200 @@
-// Simplified indoor navigation graph for PER21.
-// Coordinates use the same x/z campus coordinate system.
-// floor is used to show indoor routes at different heights.
+import {
+  per21ClassroomNodes,
+  PER21_SIDE_ENTRANCE_CORES,
+  PER21_BACK_CLASSROOM_Z,
+  per21CorridorStops
+} from './per21Layout.js';
 
-function createRoomIds(suffixes) {
-  return ['A', 'B', 'C', 'D', 'E', 'F', 'G'].flatMap((letter) => (
-    suffixes.map((suffix) => `${letter}${suffix}`)
+const PER21_CENTER_X = 10;
+const PER21_MEASURED_LENGTH = 132;
+const PER21_CENTER_Z = 56;
+const PER21_HALF_WIDTH = 19;
+
+const FRONT_Z = PER21_CENTER_Z - PER21_HALF_WIDTH;
+const BACK_Z = PER21_CENTER_Z + PER21_HALF_WIDTH;
+const CORE_Z = FRONT_Z + 10;
+const CLASSROOM_Z = PER21_BACK_CLASSROOM_Z;
+const INSIDE_Z = CORE_Z - 2;
+const MAX_FLOOR = 4;
+
+const corridorStops = per21CorridorStops;
+
+const publicNodes = [
+  { id: 'PER21_CAFETERIA', x: 87, z: CORE_Z, floor: 0 },
+  { id: 'PER21_RESTAURANT', x: 80, z: BACK_Z - 5, floor: 0 },
+  { id: 'PER21_DECANAT', x: 72, z: BACK_Z - 5, floor: 0 },
+  { id: 'PER21_COMMUNICATIONS', x: 50, z: CORE_Z, floor: 0 },
+  { id: 'PER21_RECEPTION', x: 94, z: CORE_Z, floor: 0 },
+  { id: 'PER21_ASEA', x: 12, z: CORE_Z, floor: 0 }
+];
+
+function toWorldX(localX) {
+  return PER21_CENTER_X - PER21_MEASURED_LENGTH / 2 + localX;
+}
+
+function node(id, x, z, floor, label, type = 'indoor') {
+  return {
+    id,
+    value: {
+      x: toWorldX(x),
+      z,
+      floor,
+      label,
+      type
+    }
+  };
+}
+
+function corridorNodeId(floor, key) {
+  return `PER21_CORRIDOR_F${floor}_${key}`;
+}
+
+function nearestCorridorKey(x) {
+  return corridorStops.reduce((nearest, stop) => (
+    Math.abs(x - stop.x) < Math.abs(x - nearest.x) ? stop : nearest
+  )).key;
+}
+
+function createCorridorNodes(floor) {
+  return corridorStops.map((stop) => (
+    node(
+      corridorNodeId(floor, stop.key),
+      stop.x,
+      PER21_CENTER_Z,
+      floor,
+      `PER21 corridor floor ${floor + 1}`,
+      'corridor'
+    )
   ));
 }
 
-function createRoomNodes(floor, suffixes) {
-  const roomIds = createRoomIds(suffixes);
+function createCorridorEdges(floor) {
+  return corridorStops.slice(0, -1).map((stop, index) => [
+    corridorNodeId(floor, stop.key),
+    corridorNodeId(floor, corridorStops[index + 1].key)
+  ]);
+}
 
-  return Object.fromEntries(
-    roomIds.map((roomId, index) => [
-      `PER21_${roomId}`,
-      {
-        x: 96 - index * (172 / (roomIds.length - 1)),
-        z: 70,
+function createRoomNodes() {
+  return per21ClassroomNodes.map((room) => {
+    const isCorridorGap = room.kind === 'corridor-gap';
+
+    return node(
+      `PER21_${room.roomId}`,
+      room.x,
+      room.z ?? CLASSROOM_Z,
+      room.floor,
+      isCorridorGap ? 'Corridor under G230' : `Room ${room.roomId}`,
+      isCorridorGap ? 'corridor' : 'room'
+    );
+  });
+}
+
+function createRoomEdges() {
+  return per21ClassroomNodes
+    .filter((room) => room.kind !== 'corridor-gap')
+    .map((room) => [
+      corridorNodeId(room.floor, nearestCorridorKey(room.x)),
+      `PER21_${room.roomId}`
+    ]);
+}
+
+function createVerticalNodes() {
+  const floors = Array.from({ length: MAX_FLOOR + 1 }, (_, floor) => floor);
+
+  return PER21_SIDE_ENTRANCE_CORES.flatMap((core) => (
+    floors.flatMap((floor) => [
+      node(
+        `PER21_ELEVATOR_${core.entranceId}_F${floor}`,
+        core.localX,
+        INSIDE_Z,
         floor,
-        label: `Room ${roomId}`
-      }
+        `Elevator (${core.label}) floor ${floor + 1} — vertical circulation`,
+        'elevator'
+      ),
+      node(
+        `PER21_STAIRS_${core.entranceId}_F${floor}`,
+        core.localX + 2.5,
+        INSIDE_Z,
+        floor,
+        `Stairs (${core.label}) floor ${floor + 1} — vertical circulation`,
+        'stairs'
+      )
     ])
-  );
+  ));
 }
 
-function createRoomEdges(corridorId, suffixes) {
-  return createRoomIds(suffixes).map((roomId) => [corridorId, `PER21_${roomId}`]);
+function createVerticalEdges() {
+  const floors = Array.from({ length: MAX_FLOOR + 1 }, (_, floor) => floor);
+
+  return PER21_SIDE_ENTRANCE_CORES.flatMap((core) => {
+    const elevator = `PER21_ELEVATOR_${core.entranceId}`;
+    const stairs = `PER21_STAIRS_${core.entranceId}`;
+    const corridorKey = nearestCorridorKey(core.localX);
+
+    const floorLinks = floors.flatMap((floor) => ([
+      [corridorNodeId(floor, corridorKey), `${elevator}_F${floor}`],
+      [corridorNodeId(floor, corridorKey), `${stairs}_F${floor}`],
+      [`${elevator}_F${floor}`, `${stairs}_F${floor}`]
+    ]));
+
+    const verticalLinks = floors.slice(0, -1).flatMap((floor) => ([
+      [`${elevator}_F${floor}`, `${elevator}_F${floor + 1}`],
+      [`${stairs}_F${floor}`, `${stairs}_F${floor + 1}`]
+    ]));
+
+    const entranceLink = [
+      [core.entranceId, `${stairs}_F0`],
+      [core.entranceId, `${elevator}_F0`]
+    ];
+
+    return [...floorLinks, ...verticalLinks, ...entranceLink];
+  });
 }
+
+const corridorFloors = [0, 1, 2, 3, 4];
+
+const entranceNodes = PER21_SIDE_ENTRANCE_CORES.map((core) => (
+  node(core.entranceId, core.localX, FRONT_Z, 0, `PER21 ${core.label}`, 'entrance')
+));
+
+const nodes = [
+  ...entranceNodes,
+  node('PER21_PER22_CONNECTION_ENTRANCE', 3, FRONT_Z, 0, 'PER21 PER22 connection (indoor)', 'entrance'),
+  node('PER21_MAIN_ENTRANCE', 110, FRONT_Z, 0, 'PER21 Main Entrance', 'entrance'),
+  node('PER21_BACK_ENTRANCE', 61, BACK_Z, 0, 'PER21 Back Entrance', 'entrance'),
+  node('PER21_BACK_ENTRANCE_1', 97, BACK_Z, 0, 'PER21 Back Entrance 1', 'entrance'),
+  node('PER21_BACK_ENTRANCE_2', 123, BACK_Z, 0, 'PER21 Back Entrance 2', 'entrance'),
+  ...publicNodes.map((place) => node(
+    place.id,
+    place.x,
+    place.z,
+    place.floor,
+    place.id.replace('PER21_', '').replaceAll('_', ' '),
+    'corridor'
+  )),
+  node('PER21_MAIN_CORRIDOR_F0', 66, PER21_CENTER_Z, 0, 'PER21 ground corridor', 'corridor'),
+  ...corridorFloors.flatMap(createCorridorNodes),
+  ...createVerticalNodes(),
+  ...createRoomNodes()
+];
 
 export const per21IndoorGraph = {
-  nodes: {
-    PER21_MAIN_ENTRANCE: {
-      x: 73,
-      z: 35,
-      floor: 0,
-      label: "PER21 Main Entrance"
-    },
-
-    PER21_BACK_ENTRANCE: {
-      x: 73,
-      z: 77,
-      floor: 0,
-      label: "PER21 Back Entrance"
-    },
-
-    PER21_LOBBY: {
-      x: 73,
-      z: 50,
-      floor: 0,
-      label: "PER21 Lobby"
-    },
-
-    PER21_GROUND_HALL: {
-      x: 45,
-      z: 58,
-      floor: 0,
-      label: "PER21 Ground Floor Hall"
-    },
-
-    PER21_GROUND_ROOM_WEST: {
-      x: -55,
-      z: 50,
-      floor: 0,
-      label: "PER21 Ground Floor West Room"
-    },
-
-    PER21_DECANAT: {
-      x: 10,
-      z: 50,
-      floor: 0,
-      label: "PER21 Decanat"
-    },
-
-    PER21_GROUND_ROOM_EAST: {
-      x: 75,
-      z: 50,
-      floor: 0,
-      label: "PER21 Ground Floor East Room"
-    },
-
-    PER21_GROUND_CORRIDOR_A: {
-      x: 35,
-      z: 66,
-      floor: 0,
-      label: "Ground floor corridor"
-    },
-
-    PER21_STAIRS_A_F0: {
-      x: 96,
-      z: 66,
-      floor: 0,
-      label: "Stairs A ground floor"
-    },
-
-    PER21_STAIRS_A_F1: {
-      x: 96,
-      z: 66,
-      floor: 1,
-      label: "Stairs A first floor"
-    },
-
-    PER21_STAIRS_A_F2: {
-      x: 96,
-      z: 66,
-      floor: 2,
-      label: "Stairs A second floor"
-    },
-
-    PER21_STAIRS_D_F0: {
-      x: 10,
-      z: 66,
-      floor: 0,
-      label: "Stairs D ground floor"
-    },
-
-    PER21_STAIRS_D_F1: {
-      x: 10,
-      z: 66,
-      floor: 1,
-      label: "Stairs D first floor"
-    },
-
-    PER21_STAIRS_D_F2: {
-      x: 10,
-      z: 66,
-      floor: 2,
-      label: "Stairs D second floor"
-    },
-
-    PER21_STAIRS_G_F0: {
-      x: -76,
-      z: 66,
-      floor: 0,
-      label: "Stairs G ground floor"
-    },
-
-    PER21_STAIRS_G_F1: {
-      x: -76,
-      z: 66,
-      floor: 1,
-      label: "Stairs G first floor"
-    },
-
-    PER21_STAIRS_G_F2: {
-      x: -76,
-      z: 66,
-      floor: 2,
-      label: "Stairs G second floor"
-    },
-
-    PER21_FIRST_CORRIDOR_A: {
-      x: 15,
-      z: 64,
-      floor: 1,
-      label: "First floor classroom corridor"
-    },
-
-    PER21_SECOND_CORRIDOR_A: {
-      x: 15,
-      z: 64,
-      floor: 2,
-      label: "Second floor classroom corridor"
-    },
-
-    ...createRoomNodes(1, ['130', '140']),
-
-    ...createRoomNodes(2, ['230', '240'])
-  },
+  nodes: Object.fromEntries(nodes.map((entry) => [entry.id, entry.value])),
 
   edges: [
-    ["PER21_MAIN_ENTRANCE", "PER21_LOBBY"],
-    ["PER21_LOBBY", "PER21_GROUND_HALL"],
-    ["PER21_GROUND_HALL", "PER21_GROUND_ROOM_WEST"],
-    ["PER21_GROUND_HALL", "PER21_DECANAT"],
-    ["PER21_GROUND_HALL", "PER21_GROUND_ROOM_EAST"],
-    ["PER21_GROUND_HALL", "PER21_GROUND_CORRIDOR_A"],
-    ["PER21_BACK_ENTRANCE", "PER21_GROUND_CORRIDOR_A"],
-
-    ["PER21_GROUND_CORRIDOR_A", "PER21_STAIRS_A_F0"],
-    ["PER21_GROUND_CORRIDOR_A", "PER21_STAIRS_D_F0"],
-    ["PER21_GROUND_CORRIDOR_A", "PER21_STAIRS_G_F0"],
-
-    ["PER21_STAIRS_A_F0", "PER21_STAIRS_A_F1"],
-    ["PER21_STAIRS_A_F1", "PER21_STAIRS_A_F2"],
-    ["PER21_STAIRS_D_F0", "PER21_STAIRS_D_F1"],
-    ["PER21_STAIRS_D_F1", "PER21_STAIRS_D_F2"],
-    ["PER21_STAIRS_G_F0", "PER21_STAIRS_G_F1"],
-    ["PER21_STAIRS_G_F1", "PER21_STAIRS_G_F2"],
-
-    ["PER21_STAIRS_A_F1", "PER21_FIRST_CORRIDOR_A"],
-    ["PER21_STAIRS_D_F1", "PER21_FIRST_CORRIDOR_A"],
-    ["PER21_STAIRS_G_F1", "PER21_FIRST_CORRIDOR_A"],
-    ["PER21_STAIRS_A_F2", "PER21_SECOND_CORRIDOR_A"],
-    ["PER21_STAIRS_D_F2", "PER21_SECOND_CORRIDOR_A"],
-    ["PER21_STAIRS_G_F2", "PER21_SECOND_CORRIDOR_A"],
-
-    ...createRoomEdges("PER21_FIRST_CORRIDOR_A", ['130', '140']),
-    ...createRoomEdges("PER21_SECOND_CORRIDOR_A", ['230', '240'])
+    ...corridorFloors.flatMap(createCorridorEdges),
+    ['PER21_MAIN_CORRIDOR_F0', corridorNodeId(0, 'H_END')],
+    ...publicNodes.map((place) => [
+      corridorNodeId(0, nearestCorridorKey(place.x)),
+      place.id
+    ]),
+    ['PER21_PER22_CONNECTION_ENTRANCE', corridorNodeId(0, 'H_END')],
+    ['PER21_MAIN_ENTRANCE', corridorNodeId(0, 'F_ROOMS')],
+    ['PER21_BACK_ENTRANCE', corridorNodeId(0, 'C_ROOMS')],
+    ['PER21_BACK_ENTRANCE_1', corridorNodeId(0, 'B_ROOMS')],
+    ['PER21_BACK_ENTRANCE_2', corridorNodeId(0, 'A_ROOMS')],
+    ...createVerticalEdges(),
+    ...createRoomEdges()
   ]
 };

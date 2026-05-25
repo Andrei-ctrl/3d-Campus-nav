@@ -2,8 +2,13 @@ import {
   createVoiceRecognizer,
   isVoiceRecognitionSupported
 } from '../voice/voiceRecognition.js';
-import { resolveSpokenNavigationCommand } from '../llm/navigationAgent.js';
+import {
+  resolveNavigationCommand,
+  resolveSpokenNavigationCommand
+} from '../llm/navigationAgent.js';
 import { setupWidget } from './widgets.js';
+
+import { getAnchorById, getAnchorForEntranceId } from '../data/anchors.js';
 
 function findAnchorForDestination(destinationId, anchors, destinations) {
   const destination = destinations.find((item) => item.id === destinationId);
@@ -14,7 +19,7 @@ function findAnchorForDestination(destinationId, anchors, destinations) {
     ? destination.room?.nearestEntranceId
     : destination.defaultEntranceId;
 
-  const exactAnchor = anchors.find((anchor) => anchor.entranceId === entranceId);
+  const exactAnchor = getAnchorForEntranceId(entranceId);
 
   if (exactAnchor) return exactAnchor;
 
@@ -27,7 +32,7 @@ function findAnchorForDestination(destinationId, anchors, destinations) {
 
 export function createRouteControls(
   anchors,
-  destinations,
+  getDestinations,
   onShowRoute,
   onClearRoute,
   onRunCommand
@@ -78,21 +83,37 @@ export function createRouteControls(
   const toSelect = document.createElement('select');
   toSelect.id = 'route-to';
 
-  destinations.forEach((destination) => {
-    const toOption = document.createElement('option');
-    toOption.value = destination.id;
-    toOption.textContent = destination.name;
-    toSelect.appendChild(toOption);
-  });
+  const populateDestinationOptions = () => {
+    const destinations = getDestinations();
+    const previousValue = toSelect.value;
 
-  // Command input
+    toSelect.innerHTML = '';
+
+    destinations.forEach((destination) => {
+      const toOption = document.createElement('option');
+      toOption.value = destination.id;
+      toOption.textContent = destination.name;
+      toSelect.appendChild(toOption);
+    });
+
+    if (previousValue && destinations.some((item) => item.id === previousValue)) {
+      toSelect.value = previousValue;
+    }
+  };
+
+  populateDestinationOptions();
+
   const commandLabel = document.createElement('label');
   commandLabel.textContent = 'Command';
 
   const commandInput = document.createElement('input');
   commandInput.id = 'route-command';
   commandInput.type = 'text';
-  commandInput.placeholder = 'e.g. go to PER21 C130';
+  commandInput.placeholder = 'e.g. Machine Scheduling, Wirtschaftsinformatik II, PER21 G230';
+
+  const timetableStatus = document.createElement('p');
+  timetableStatus.className = 'route-timetable-status';
+  timetableStatus.textContent = 'Loading course timetable...';
 
   const commandButton = document.createElement('button');
   commandButton.textContent = 'Run Command';
@@ -101,11 +122,58 @@ export function createRouteControls(
   voiceButton.type = 'button';
   voiceButton.textContent = '🎤 Speak';
 
+  const debugClassroomDisplay = document.createElement('p');
+  debugClassroomDisplay.className = 'route-debug-classroom';
+  debugClassroomDisplay.textContent = 'Resolved classroom: —';
+
   let voiceRecognizer = null;
   let pendingVoiceTranscript = '';
   let voiceFromDestinationId = null;
 
+  const updateTimetableStatus = (meta) => {
+    if (!meta) {
+      timetableStatus.textContent = 'Course timetable: not loaded';
+      return;
+    }
+
+    if (meta.error) {
+      timetableStatus.textContent = `Course timetable unavailable: ${meta.error}`;
+      return;
+    }
+
+    timetableStatus.textContent =
+      `Course timetable: ${meta.mappedCourseCount}/${meta.courseCount} courses mapped` +
+      (meta.unmappedCourseCount > 0 ? ` (${meta.unmappedCourseCount} unmapped)` : '');
+  };
+
+  const updateDebugClassroomDisplay = () => {
+    const destinations = getDestinations();
+    const selectedDestination = destinations.find((item) => item.id === toSelect.value);
+    const commandText = commandInput.value.trim();
+
+    if (commandText) {
+      const result = resolveNavigationCommand(commandText, destinations);
+
+      if (result.success && result.toDestinationId) {
+        const destination = destinations.find((item) => item.id === result.toDestinationId);
+
+        if (destination?.type === 'room') {
+          debugClassroomDisplay.textContent = `Resolved classroom: ${destination.room.name}`;
+          return;
+        }
+      }
+    }
+
+    if (selectedDestination?.type === 'room') {
+      debugClassroomDisplay.textContent = `Resolved classroom: ${selectedDestination.room.name}`;
+      return;
+    }
+
+    debugClassroomDisplay.textContent = 'Resolved classroom: —';
+  };
+
   const applySpokenCommand = (transcript) => {
+    const destinations = getDestinations();
     const result = resolveSpokenNavigationCommand(transcript, destinations);
 
     if (!result.success) {
@@ -116,7 +184,8 @@ export function createRouteControls(
     if (result.fromDestinationId) {
       voiceFromDestinationId = result.fromDestinationId;
 
-      const anchor = findAnchorForDestination(result.fromDestinationId, anchors, destinations);
+      const anchor = getAnchorById(result.fromDestinationId)
+        || findAnchorForDestination(result.fromDestinationId, anchors, destinations);
 
       if (anchor) {
         currentLocationSelect.value = anchor.id;
@@ -125,6 +194,7 @@ export function createRouteControls(
 
     if (!result.toDestinationId) {
       commandInput.value = transcript;
+      updateDebugClassroomDisplay();
       return;
     }
 
@@ -140,6 +210,7 @@ export function createRouteControls(
       ? `from ${fromDestinationId} to ${result.toDestinationId}`
       : transcript;
 
+    updateDebugClassroomDisplay();
     onRunCommand(currentLocationSelect.value, commandInput.value);
   };
 
@@ -188,6 +259,7 @@ export function createRouteControls(
   });
 
   commandButton.addEventListener('click', () => {
+    updateDebugClassroomDisplay();
     onRunCommand(currentLocationSelect.value, commandInput.value);
   });
 
@@ -198,9 +270,13 @@ export function createRouteControls(
 
   commandInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
+      updateDebugClassroomDisplay();
       onRunCommand(currentLocationSelect.value, commandInput.value);
     }
   });
+
+  commandInput.addEventListener('input', updateDebugClassroomDisplay);
+  toSelect.addEventListener('change', updateDebugClassroomDisplay);
 
   content.appendChild(currentLocationLabel);
   content.appendChild(currentLocationSelect);
@@ -213,8 +289,10 @@ export function createRouteControls(
 
   content.appendChild(commandLabel);
   content.appendChild(commandInput);
+  content.appendChild(timetableStatus);
   content.appendChild(commandButton);
   content.appendChild(voiceButton);
+  content.appendChild(debugClassroomDisplay);
 
   container.appendChild(header);
   container.appendChild(content);
@@ -226,10 +304,17 @@ export function createRouteControls(
     minimizeButton
   });
 
+  updateDebugClassroomDisplay();
+
   return {
     container,
     currentLocationSelect,
     toSelect,
-    commandInput
+    commandInput,
+    updateDestinations: (destinations, timetableMeta) => {
+      populateDestinationOptions();
+      updateTimetableStatus(timetableMeta);
+      updateDebugClassroomDisplay();
+    }
   };
 }

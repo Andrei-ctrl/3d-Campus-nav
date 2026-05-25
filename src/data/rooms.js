@@ -1,37 +1,49 @@
-const per21RoomIds = [
-  'A130',
-  'A140',
-  'B130',
-  'B140',
-  'C130',
-  'C140',
-  'D130',
-  'D140',
-  'E130',
-  'E140',
-  'F130',
-  'F140',
-  'G130',
-  'G140',
-  'A230',
-  'A240',
-  'B230',
-  'B240',
-  'C230',
-  'C240',
-  'D230',
-  'D240',
-  'E230',
-  'E240',
-  'F230',
-  'F240',
-  'G230',
-  'G240'
+import {
+  per21ClassroomNodes,
+  per21CubicFirstFloorRooms,
+  per21ClassroomFirstFloorRooms,
+  per21UpperFloorRooms,
+  PER21_LAYOUT_SIZES
+} from './per21Layout.js';
+
+function formatDimensions(size) {
+  return `${size.length} x ${size.width} m`;
+}
+
+const per21Classrooms = [
+  ...per21CubicFirstFloorRooms.map((room) => ({
+    roomNumber: room.roomId,
+    floor: 1,
+    roomType: 'cube',
+    dimensions: `${formatDimensions(room.size ?? {
+      length: PER21_LAYOUT_SIZES.cubeLength,
+      width: PER21_LAYOUT_SIZES.cubeWidth
+    })}, two-floor height`
+  })),
+  ...per21ClassroomFirstFloorRooms.map((room) => ({
+    roomNumber: room.roomId,
+    floor: 1,
+    roomType: 'classroom',
+    dimensions: formatDimensions(room.size ?? {
+      length: PER21_LAYOUT_SIZES.classLength,
+      width: PER21_LAYOUT_SIZES.classWidth
+    })
+  })),
+  ...per21UpperFloorRooms.map((room) => ({
+    roomNumber: room.roomId,
+    floor: 2,
+    roomType: room.kind === 'front-upper' ? 'front-upper' : 'normal',
+    dimensions: formatDimensions(room.size ?? {
+      length: PER21_LAYOUT_SIZES.classLength,
+      width: PER21_LAYOUT_SIZES.classWidth
+    })
+  }))
 ];
 
-function createPer21Room(roomNumber) {
-  const floor = roomNumber.includes('2') ? 2 : 1;
-  const spokenRoomNumber = roomNumber.replace(/^([A-G])/, '$1 ');
+function createPer21Room(roomConfig) {
+  const { roomNumber, floor, roomType, dimensions } = roomConfig;
+  const spokenRoomNumber = roomNumber.replace(/^([A-H])/, '$1 ');
+  const typeLabel = roomType === 'cube' ? 'Cubic room' : roomType === 'classroom' ? 'Classroom' : 'Room';
 
   return {
     id: `PER21_${roomNumber}`,
@@ -39,24 +51,93 @@ function createPer21Room(roomNumber) {
     buildingId: 'PER21',
     floor,
     capacity: null,
-    nearestEntranceId: 'PER21_BACK_ENTRANCE',
+    nearestEntranceId: 'PER21_SIDE_ENTRANCE_2',
     indoorNodeId: `PER21_${roomNumber}`,
+    roomType,
+    dimensions,
     aliases: [
       roomNumber.toLowerCase(),
       spokenRoomNumber.toLowerCase(),
       `room ${roomNumber}`.toLowerCase(),
-      `room ${spokenRoomNumber}`.toLowerCase(),
       `classroom ${roomNumber}`.toLowerCase(),
-      `classroom ${spokenRoomNumber}`.toLowerCase(),
-      `per21 ${roomNumber}`.toLowerCase(),
-      `per21 ${spokenRoomNumber}`.toLowerCase()
+      `per21 ${roomNumber}`.toLowerCase()
     ],
-    description: `Classroom ${roomNumber} in PER21, floor ${floor}`
+    description: `${typeLabel} ${roomNumber} in PER21, floor ${floor}, ${dimensions}`
   };
 }
 
+const per21PublicPlaces = [
+  {
+    id: 'PER21_CAFETERIA',
+    name: 'Cafeteria',
+    buildingId: 'PER21',
+    floor: 0,
+    capacity: null,
+    nearestEntranceId: 'PER21_MAIN_ENTRANCE',
+    indoorNodeId: 'PER21_CAFETERIA',
+    aliases: ['cafeteria', 'per21 cafeteria', 'cafe', 'per21 cafe'],
+    description: 'Cafeteria area on the PER21 ground floor'
+  },
+  {
+    id: 'PER21_RESTAURANT',
+    name: 'Restaurant',
+    buildingId: 'PER21',
+    floor: 0,
+    capacity: null,
+    nearestEntranceId: 'PER21_MAIN_ENTRANCE',
+    indoorNodeId: 'PER21_RESTAURANT',
+    aliases: ['restaurant', 'per21 restaurant', 'cantine', 'canteen'],
+    description: 'Restaurant area on the PER21 ground floor'
+  },
+  {
+    id: 'PER21_DECANAT',
+    name: 'Decanat',
+    buildingId: 'PER21',
+    floor: 0,
+    capacity: null,
+    nearestEntranceId: 'PER21_MAIN_ENTRANCE',
+    indoorNodeId: 'PER21_DECANAT',
+    aliases: ['decanat', 'dean office', 'per21 decanat'],
+    description: 'Decanat office area on the PER21 ground floor'
+  },
+  {
+    id: 'PER21_COMMUNICATIONS',
+    name: 'Communications',
+    buildingId: 'PER21',
+    floor: 0,
+    capacity: null,
+    nearestEntranceId: 'PER21_SIDE_ENTRANCE_3',
+    indoorNodeId: 'PER21_COMMUNICATIONS',
+    aliases: ['communications', 'communication', 'per21 communications'],
+    description: 'Communications office area on the PER21 ground floor'
+  },
+  {
+    id: 'PER21_RECEPTION',
+    name: 'Reception',
+    buildingId: 'PER21',
+    floor: 0,
+    capacity: null,
+    nearestEntranceId: 'PER21_MAIN_ENTRANCE',
+    indoorNodeId: 'PER21_RECEPTION',
+    aliases: ['reception', 'front desk', 'per21 reception'],
+    description: 'Reception area on the PER21 ground floor'
+  },
+  {
+    id: 'PER21_ASEA',
+    name: 'ASEA',
+    buildingId: 'PER21',
+    floor: 0,
+    capacity: null,
+    nearestEntranceId: 'PER21_END_SIDE_ENTRANCE',
+    indoorNodeId: 'PER21_ASEA',
+    aliases: ['asea', 'per21 asea'],
+    description: 'ASEA office area near the PER22 side of PER21'
+  }
+];
+
 export const rooms = [
-  ...per21RoomIds.map(createPer21Room),
+  ...per21PublicPlaces,
+  ...per21Classrooms.map(createPer21Room),
   {
     id: "PER22_AUDITORIUM_JOSEPH_DEISS",
     name: "Auditorium Joseph Deiss",
@@ -70,9 +151,15 @@ export const rooms = [
       "joseph deiss",
       "auditorium",
       "per22 auditorium",
-      "per22 joseph deiss"
+      "per22 joseph deiss",
+      "002",
+      "room 002",
+      "per22 002",
+      "per22 room 002",
+      "salle 002",
+      "joseph deiss 002"
     ],
-    description: "Auditorium Joseph Deiss in PER22, two floors high"
+    description: "Auditorium Joseph Deiss (room 002) in PER22, two floors high"
   },
   {
     id: "PER22_LIBRARY",
@@ -99,7 +186,12 @@ export const rooms = [
     capacity: 48,
     nearestEntranceId: "PER17_ENTRANCE",
     indoorNodeId: "PER17_001",
-    aliases: ["salle 001", "room 001", "001", "per17 001"],
+    aliases: [
+      "salle 001",
+      "room 001",
+      "001",
+      "per17 001"
+    ],
     description: "Salle 001, 48 places"
   },
   {

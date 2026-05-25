@@ -98,6 +98,7 @@ export function createOrbitControls(camera, renderer) {
     zoomSpeed: 1,
     enableRotate: true,
     rotateSpeed: 0.005,
+    rightDragMoveSpeed: 0.18,
     minDistance: 40,
     maxDistance: 900,
     _phi: initialPhi,
@@ -124,36 +125,63 @@ export function createOrbitControls(camera, renderer) {
     }
   };
 
-  let isDragging = false;
+  let dragMode = null;
   let previousMousePosition = { x: 0, y: 0 };
 
+  function moveTargetFromRightDrag(deltaX, deltaY) {
+    const scale = controls.rightDragMoveSpeed * Math.max(0.45, controls._radius / 280);
+    const forward = {
+      x: -Math.cos(controls._theta),
+      z: -Math.sin(controls._theta)
+    };
+    const right = {
+      x: -forward.z,
+      z: forward.x
+    };
+
+    const strafe = deltaX * scale;
+    const advance = -deltaY * scale;
+
+    controls._targetX += right.x * strafe + forward.x * advance;
+    controls._targetZ += right.z * strafe + forward.z * advance;
+  }
+
+  renderer.domElement.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+  });
+
   renderer.domElement.addEventListener('mousedown', (e) => {
-    if (e.button === 0) {
-      isDragging = true;
+    if (e.button === 0 || e.button === 2) {
+      e.preventDefault();
+      dragMode = e.button === 0 ? 'rotate' : 'move';
       previousMousePosition = { x: e.clientX, y: e.clientY };
     }
   });
 
   renderer.domElement.addEventListener('mousemove', (e) => {
-    if (isDragging) {
+    if (dragMode) {
       const deltaX = e.clientX - previousMousePosition.x;
       const deltaY = e.clientY - previousMousePosition.y;
 
-      controls._theta -= deltaX * controls.rotateSpeed;
-      controls._phi += deltaY * controls.rotateSpeed;
+      if (dragMode === 'rotate') {
+        controls._theta -= deltaX * controls.rotateSpeed;
+        controls._phi += deltaY * controls.rotateSpeed;
 
-      controls._phi = Math.max(0.1, Math.min(Math.PI - 0.1, controls._phi));
+        controls._phi = Math.max(0.1, Math.min(Math.PI - 0.1, controls._phi));
+      } else {
+        moveTargetFromRightDrag(deltaX, deltaY);
+      }
 
       previousMousePosition = { x: e.clientX, y: e.clientY };
     }
   });
 
-  renderer.domElement.addEventListener('mouseup', () => {
-    isDragging = false;
+  window.addEventListener('mouseup', () => {
+    dragMode = null;
   });
 
   renderer.domElement.addEventListener('mouseleave', () => {
-    isDragging = false;
+    dragMode = null;
   });
 
   renderer.domElement.addEventListener('wheel', (e) => {
