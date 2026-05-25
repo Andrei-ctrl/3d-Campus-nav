@@ -56,7 +56,7 @@ export function createCalibrationPanel({ onApply, onMirrorToggle, onFitView } = 
   const help = document.createElement('p');
   help.className = 'calibration-help';
   help.textContent =
-    'One scale and offset for the whole campus model. Default scale is 0.05 (map metres). AR routes use real-world metres and are not affected by this scale.';
+    'One scale and offset for the whole campus model (default scale 0.05). In AR only the green route line is shown — not the 3D buildings. Use “Debug route in front of camera” in AR mode to verify the line appears immediately.';
   content.appendChild(help);
 
   const modeLabel = document.createElement('label');

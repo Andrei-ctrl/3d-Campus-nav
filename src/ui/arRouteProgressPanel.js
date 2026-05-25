@@ -1,9 +1,11 @@
 import { setupWidget } from './widgets.js';
 import {
+  alignARRouteForSession,
   anchorRouteToCurrentCamera,
   getDistanceToNextNode,
   getRemainingIndoorDistance
 } from '../ar/indoorRouteProgress.js';
+import { getSceneCalibration } from '../scene/sceneCalibration.js';
 
 function formatDistance(value) {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -95,8 +97,10 @@ export function createARRouteProgressPanel({
       return;
     }
 
-    anchorRouteToCurrentCamera(routeState.routeGroup, camera, routeState, scene, {
-      instruction: 'Follow the green route'
+    const calibration = getSceneCalibration();
+
+    alignARRouteForSession(routeState, camera, scene, {
+      arMode: calibration.mode
     });
 
     refreshUI(routeState);

@@ -6,7 +6,7 @@ import {
   clearIndoorARRoute,
   prepareIndoorARRoute,
   updateRouteProgress,
-  anchorRouteToCurrentCamera
+  alignARRouteForSession
 } from './ar/indoorRouteProgress.js';
 import { convertRouteToAnchorRelative } from './ar/arRouteAdapter.js';
 import { anchors, getAnchorById, getAnchorForEntranceId } from './data/anchors.js';
@@ -180,6 +180,7 @@ function refreshIndoorARRouteForMirror() {
   const calibration = getSceneCalibration();
   indoorARRouteState = prepareIndoorARRoute(scene, {
     ...latestARRoute,
+    arMode: calibration.mode,
     arOptions: {
       arMirrorX: calibration.arMirrorX ?? -1,
       arScale: calibration.arScale
@@ -191,12 +192,9 @@ function refreshIndoorARRouteForMirror() {
   });
 
   if (wasAligned && indoorARRouteState && isARSessionRunning && renderer.xr.isPresenting) {
-    anchorRouteToCurrentCamera(
-      indoorARRouteState.routeGroup,
-      camera,
-      indoorARRouteState,
-      scene
-    );
+    alignARRouteForSession(indoorARRouteState, camera, scene, {
+      arMode: calibration.mode
+    });
   }
 
   arRouteProgressPanel?.setPrepared?.(true);
@@ -1094,6 +1092,7 @@ async function createARButton() {
 
     indoorARRouteState = prepareIndoorARRoute(scene, {
       ...latestARRoute,
+      arMode: calibration.mode,
       arOptions: {
         arMirrorX: calibration.arMirrorX ?? -1,
         arScale: calibration.arScale
@@ -1113,6 +1112,10 @@ async function createARButton() {
       button.textContent = 'Start AR';
       return;
     }
+
+    alignARRouteForSession(indoorARRouteState, camera, scene, {
+      arMode: calibration.mode
+    });
 
     arRouteProgressPanel?.setPrepared?.(true);
     arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
