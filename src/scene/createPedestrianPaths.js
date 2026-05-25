@@ -18,7 +18,7 @@ function createPathSegment(start, end, width, color) {
 
   mesh.position.set(
     (start.x + end.x) / 2,
-    0.08,
+    0.04,
     (start.z + end.z) / 2
   );
 

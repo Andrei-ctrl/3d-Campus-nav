@@ -151,6 +151,7 @@ let areRoutesVisible = true;
 let areLabelsVisible = true;
 let areBuildingsTransparent = false;
 let latestOutdoorPath = [];
+let latestRoutePlan = null;
 let latestAnchor = null;
 let latestToDestination = null;
 let latestHasIndoorLeg = false;
@@ -276,6 +277,7 @@ function clearIndoorARRouteState() {
 }
 
 function storeLatestRoutePlan(routePlan, toDestination, fromEntranceId = null) {
+  latestRoutePlan = routePlan;
   latestOutdoorPath = routePlan.outdoorPath ?? [];
   latestToDestination = toDestination ?? null;
   latestHasIndoorLeg = (routePlan.indoorPath?.length ?? 0) > 0
@@ -293,6 +295,7 @@ function storeLatestRoutePlan(routePlan, toDestination, fromEntranceId = null) {
 }
 
 function clearLatestRoutePlan() {
+  latestRoutePlan = null;
   latestOutdoorPath = [];
   latestToDestination = null;
   latestHasIndoorLeg = false;
@@ -300,6 +303,31 @@ function clearLatestRoutePlan() {
   latestAnchor = null;
   outdoorTrackingPanel?.stopTracking?.();
   clearIndoorARRouteState();
+}
+
+function refreshActiveRoutesAfterCalibration() {
+  if (!latestRoutePlan || !latestToDestination) {
+    return;
+  }
+
+  clearRoute(scene);
+  clearIndoorRoute(scene);
+
+  if (latestRoutePlan.outdoorPath?.length >= 2) {
+    renderRoute(scene, graph, latestRoutePlan.outdoorPath);
+  }
+
+  if (latestRoutePlan.indoorSegments?.length) {
+    renderIndoorRouteSegments(scene, latestRoutePlan.indoorSegments);
+  } else if (latestRoutePlan.indoorPath?.length >= 2) {
+    const indoorGraph = getIndoorGraphForDestination(latestToDestination);
+
+    if (indoorGraph) {
+      renderIndoorRoute(scene, indoorGraph, latestRoutePlan.indoorPath, {
+        buildingId: latestToDestination.room?.buildingId
+      });
+    }
+  }
 }
 
 function handleRouteCalibrationChange(action, mesh) {
@@ -750,6 +778,10 @@ window.addEventListener('resize', () => {
 
 // Handle mouse clicks for object selection
 window.addEventListener('click', (event) => {
+  if (controls.consumeClickSuppression?.()) {
+    return;
+  }
+
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -812,6 +844,9 @@ function displayObjectInfo(object) {
   if (data.type === 'building') {
     html += `<p><strong>Type:</strong> ${data.category || 'Building'}</p>`;
     html += `<p><strong>Name:</strong> ${data.name}</p>`;
+    if (data.floors) {
+      html += `<p><strong>Floors:</strong> ${data.floors}</p>`;
+    }
     html += `<p><strong>Description:</strong> ${data.description}</p>`;
   }
 
@@ -1167,6 +1202,7 @@ createCalibrationPanel({
   onApply: () => {
     updateMirrorButtons();
     refreshIndoorARRouteForMirror();
+    refreshActiveRoutesAfterCalibration();
   },
   onMirrorToggle: handleSceneMirrorToggle
 });

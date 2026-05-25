@@ -126,7 +126,15 @@ export function createOrbitControls(camera, renderer) {
   };
 
   let dragMode = null;
-  let previousMousePosition = { x: 0, y: 0 };
+  let activePointerId = null;
+  let previousPointerPosition = { x: 0, y: 0 };
+  let dragMoved = false;
+  let isPinching = false;
+  let pinchStartDistance = 0;
+  let pinchStartRadius = 0;
+
+  const domElement = renderer.domElement;
+  domElement.style.touchAction = 'none';
 
   function moveTargetFromRightDrag(deltaX, deltaY) {
     const scale = controls.rightDragMoveSpeed * Math.max(0.45, controls._radius / 280);
@@ -146,53 +154,129 @@ export function createOrbitControls(camera, renderer) {
     controls._targetZ += right.z * strafe + forward.z * advance;
   }
 
-  renderer.domElement.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
+  function applyRotate(deltaX, deltaY) {
+    controls._theta -= deltaX * controls.rotateSpeed;
+    controls._phi += deltaY * controls.rotateSpeed;
+    controls._phi = Math.max(0.1, Math.min(Math.PI - 0.1, controls._phi));
+  }
+
+  function applyDragDelta(deltaX, deltaY) {
+    if (Math.abs(deltaX) + Math.abs(deltaY) > 0) {
+      dragMoved = true;
+    }
+
+    if (dragMode === 'rotate') {
+      applyRotate(deltaX, deltaY);
+    } else if (dragMode === 'move') {
+      moveTargetFromRightDrag(deltaX, deltaY);
+    }
+  }
+
+  function getTouchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  function stopPointerDrag(event) {
+    if (event.pointerId !== activePointerId) {
+      return;
+    }
+
+    dragMode = null;
+    activePointerId = null;
+
+    if (domElement.hasPointerCapture(event.pointerId)) {
+      domElement.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  domElement.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
   });
 
-  renderer.domElement.addEventListener('mousedown', (e) => {
-    if (e.button === 0 || e.button === 2) {
-      e.preventDefault();
-      dragMode = e.button === 0 ? 'rotate' : 'move';
-      previousMousePosition = { x: e.clientX, y: e.clientY };
+  domElement.addEventListener('touchstart', (event) => {
+    if (event.touches.length === 2) {
+      isPinching = true;
+      dragMode = null;
+      activePointerId = null;
+      pinchStartDistance = getTouchDistance(event.touches);
+      pinchStartRadius = controls._radius;
+      event.preventDefault();
+    }
+  }, { passive: false });
+
+  domElement.addEventListener('touchmove', (event) => {
+    if (!isPinching || event.touches.length !== 2) {
+      return;
+    }
+
+    const distance = getTouchDistance(event.touches);
+
+    if (pinchStartDistance > 0) {
+      const scale = pinchStartDistance / distance;
+      controls._radius = Math.max(
+        controls.minDistance,
+        Math.min(controls.maxDistance, pinchStartRadius * scale)
+      );
+      dragMoved = true;
+    }
+
+    event.preventDefault();
+  }, { passive: false });
+
+  domElement.addEventListener('touchend', (event) => {
+    if (event.touches.length < 2) {
+      isPinching = false;
+      pinchStartDistance = 0;
     }
   });
 
-  renderer.domElement.addEventListener('mousemove', (e) => {
-    if (dragMode) {
-      const deltaX = e.clientX - previousMousePosition.x;
-      const deltaY = e.clientY - previousMousePosition.y;
+  domElement.addEventListener('pointerdown', (event) => {
+    if (isPinching || activePointerId !== null) {
+      return;
+    }
 
-      if (dragMode === 'rotate') {
-        controls._theta -= deltaX * controls.rotateSpeed;
-        controls._phi += deltaY * controls.rotateSpeed;
-
-        controls._phi = Math.max(0.1, Math.min(Math.PI - 0.1, controls._phi));
-      } else {
-        moveTargetFromRightDrag(deltaX, deltaY);
-      }
-
-      previousMousePosition = { x: e.clientX, y: e.clientY };
+    if (event.button === 0 || event.button === 2) {
+      event.preventDefault();
+      dragMode = event.button === 0 ? 'rotate' : 'move';
+      activePointerId = event.pointerId;
+      previousPointerPosition = { x: event.clientX, y: event.clientY };
+      dragMoved = false;
+      domElement.setPointerCapture(event.pointerId);
     }
   });
 
-  window.addEventListener('mouseup', () => {
-    dragMode = null;
+  domElement.addEventListener('pointermove', (event) => {
+    if (isPinching || event.pointerId !== activePointerId || !dragMode) {
+      return;
+    }
+
+    const deltaX = event.clientX - previousPointerPosition.x;
+    const deltaY = event.clientY - previousPointerPosition.y;
+
+    applyDragDelta(deltaX, deltaY);
+    previousPointerPosition = { x: event.clientX, y: event.clientY };
   });
 
-  renderer.domElement.addEventListener('mouseleave', () => {
-    dragMode = null;
-  });
+  domElement.addEventListener('pointerup', stopPointerDrag);
+  domElement.addEventListener('pointercancel', stopPointerDrag);
 
-  renderer.domElement.addEventListener('wheel', (e) => {
-    e.preventDefault();
+  domElement.addEventListener('wheel', (event) => {
+    event.preventDefault();
 
-    controls._radius += e.deltaY * controls.zoomSpeed * 0.01;
+    controls._radius += event.deltaY * controls.zoomSpeed * 0.01;
     controls._radius = Math.max(
       controls.minDistance,
       Math.min(controls.maxDistance, controls._radius)
     );
   }, { passive: false });
+
+  controls.consumeClickSuppression = () => {
+    const suppress = dragMoved;
+    dragMoved = false;
+    return suppress;
+  };
 
   return controls;
 }

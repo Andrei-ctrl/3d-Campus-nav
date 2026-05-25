@@ -64,7 +64,8 @@ function createBuildingMesh(building) {
     category: building.type,
     id: building.id,
     name: building.name,
-    description: building.description
+    description: building.description,
+    floors: building.floors ?? null
   };
 
   return mesh;

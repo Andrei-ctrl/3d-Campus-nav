@@ -24,7 +24,7 @@ function createRouteSegment(start, end) {
 
   mesh.position.set(
     (start.x + end.x) / 2,
-    0.25,
+    0.125,
     (start.z + end.z) / 2
   );
 
