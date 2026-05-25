@@ -19,6 +19,14 @@ export const PER21_FRONT_UPPER_Z = 41;
 export const PER21_MAIN_HALL_X = 110;
 export const PER21_MAIN_HALL_SPINE_LENGTH = 20;
 export const PER21_MAIN_HALL_TURN_OFFSET = 12;
+/** Stairs begin this far inside from the front facade (not at the door). */
+export const PER21_MAIN_STAIRS_DEPTH = 15;
+
+const PER21_CENTER_Z = 56;
+const PER21_HALF_WIDTH = 19;
+const PER21_FRONT_Z = PER21_CENTER_Z - PER21_HALF_WIDTH;
+
+export const PER21_MAIN_STAIRS_Z = PER21_FRONT_Z + PER21_MAIN_STAIRS_DEPTH;
 
 function round1(value) {
   return Math.round(value * 10) / 10;

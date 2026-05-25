@@ -6,7 +6,7 @@ import { convertMapPointToAnchorRelative } from './arRouteAdapter.js';
 // Progress is measured by distance from the live AR camera to each route node.
 
 export const DEFAULT_INDOOR_REACHED_THRESHOLD = 1.5;
-const ROUTE_Y_OFFSET = 0.08;
+const ROUTE_Y_OFFSET = 0.02;
 const FLOOR_STEP = 3;
 
 const VERTICAL_NODE_PATTERN = /(STAIRS|ELEVATOR|LIFT)/i;

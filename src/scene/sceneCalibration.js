@@ -19,7 +19,7 @@ export const defaultSceneCalibration = {
   routesScale: 1,
   arScale: 0.05,
   arOffsetX: 0,
-  arOffsetY: -0.45,
+  arOffsetY: 0,
   arOffsetZ: -1.5,
   arMirrorX: -1,
   mode: 'anchor-relative',
@@ -92,6 +92,11 @@ export function sanitizeSceneCalibration(raw = {}) {
   }
 
   merged.livePreview = merged.livePreview !== false;
+
+  // Older builds used arOffsetY=-0.45 to compensate for indoor overlay height; base-Y handles that now.
+  if (Math.abs(Number(merged.arOffsetY) - (-0.45)) < 0.01) {
+    merged.arOffsetY = defaultSceneCalibration.arOffsetY;
+  }
 
   return merged;
 }
@@ -202,6 +207,21 @@ export function unregisterCalibratedObject(object) {
   originalTransforms.delete(object);
 }
 
+const AR_BASE_Y_BY_GROUP = {
+  buildings: 0,
+  per21Indoor: 9,
+  per22Indoor: 9,
+  per17Indoor: 9,
+  markers: 9,
+  paths: 0,
+  ground: 0,
+  routes: 9
+};
+
+function getArBaseY(groupName) {
+  return AR_BASE_Y_BY_GROUP[groupName] ?? 0;
+}
+
 function getGroupScale(groupName, calibration) {
   switch (groupName) {
     case 'buildings':
@@ -270,7 +290,7 @@ function applyTransformToObject(object, calibration, options = {}) {
       mirrorX * dx * arScale * layoutScale;
     positionY =
       calibration.arOffsetY +
-      original.position.y * arScale * layoutScale;
+      (original.position.y - getArBaseY(groupName)) * arScale * layoutScale;
     positionZ =
       calibration.arOffsetZ -
       dz * arScale * layoutScale;
