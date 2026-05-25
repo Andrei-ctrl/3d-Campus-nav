@@ -15,6 +15,11 @@ const WING_LETTERS = ['B', 'C', 'D', 'E', 'F'];
 export const PER21_BACK_CLASSROOM_Z = 71;
 export const PER21_FRONT_UPPER_Z = 41;
 
+/** Main hall routing from PER21 main entrance (local metres). */
+export const PER21_MAIN_HALL_X = 110;
+export const PER21_MAIN_HALL_SPINE_LENGTH = 20;
+export const PER21_MAIN_HALL_TURN_OFFSET = 12;
+
 function round1(value) {
   return Math.round(value * 10) / 10;
 }
@@ -295,12 +300,13 @@ export const per21RoomNotes = Object.fromEntries(
     .map((room) => [room.roomId, room.notes])
 );
 
-/** Front side entrances only (no main / back) — each gets lift + stairs inside the building. */
+/** Front entrances with lift + stairs; includes main entrance. */
 export const PER21_SIDE_ENTRANCE_CORES = [
   { entranceId: 'PER21_PER22_CONNECTION_ENTRANCE', localX: 3, label: 'PER22 connection' },
   { entranceId: 'PER21_END_SIDE_ENTRANCE', localX: 21, label: 'End side' },
   { entranceId: 'PER21_SIDE_ENTRANCE_3', localX: 61, label: 'Side entrance 3' },
   { entranceId: 'PER21_SIDE_ENTRANCE_2', localX: 97, label: 'Side entrance 2' },
+  { entranceId: 'PER21_MAIN_ENTRANCE', localX: 110, label: 'Main entrance' },
   { entranceId: 'PER21_SIDE_ENTRANCE_1', localX: 123, label: 'Side entrance 1' }
 ];
 

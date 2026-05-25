@@ -5,6 +5,7 @@ import {
   per21UpperFloorRooms,
   PER21_LAYOUT_SIZES
 } from './per21Layout.js';
+import { getNearestPer21EntranceForNode } from './per21EntranceRouting.js';
 
 function formatDimensions(size) {
   return `${size.length} x ${size.width} m`;
@@ -54,7 +55,7 @@ function createPer21Room(roomConfig) {
     buildingId: 'PER21',
     floor,
     capacity: null,
-    nearestEntranceId: 'PER21_SIDE_ENTRANCE_2',
+    nearestEntranceId: getNearestPer21EntranceForNode(`PER21_${roomNumber}`),
     indoorNodeId: `PER21_${roomNumber}`,
     roomType,
     dimensions,
@@ -76,7 +77,7 @@ const per21PublicPlaces = [
     buildingId: 'PER21',
     floor: 0,
     capacity: null,
-    nearestEntranceId: 'PER21_MAIN_ENTRANCE',
+    nearestEntranceId: getNearestPer21EntranceForNode('PER21_CAFETERIA'),
     indoorNodeId: 'PER21_CAFETERIA',
     aliases: ['cafeteria', 'per21 cafeteria', 'cafe', 'per21 cafe'],
     description: 'Cafeteria area on the PER21 ground floor'
@@ -87,7 +88,7 @@ const per21PublicPlaces = [
     buildingId: 'PER21',
     floor: 0,
     capacity: null,
-    nearestEntranceId: 'PER21_MAIN_ENTRANCE',
+    nearestEntranceId: getNearestPer21EntranceForNode('PER21_RESTAURANT'),
     indoorNodeId: 'PER21_RESTAURANT',
     aliases: ['restaurant', 'per21 restaurant', 'cantine', 'canteen'],
     description: 'Restaurant area on the PER21 ground floor'
@@ -98,7 +99,7 @@ const per21PublicPlaces = [
     buildingId: 'PER21',
     floor: 0,
     capacity: null,
-    nearestEntranceId: 'PER21_MAIN_ENTRANCE',
+    nearestEntranceId: getNearestPer21EntranceForNode('PER21_DECANAT'),
     indoorNodeId: 'PER21_DECANAT',
     aliases: ['decanat', 'dean office', 'per21 decanat'],
     description: 'Decanat office area on the PER21 ground floor'
@@ -109,7 +110,7 @@ const per21PublicPlaces = [
     buildingId: 'PER21',
     floor: 0,
     capacity: null,
-    nearestEntranceId: 'PER21_SIDE_ENTRANCE_3',
+    nearestEntranceId: getNearestPer21EntranceForNode('PER21_COMMUNICATIONS'),
     indoorNodeId: 'PER21_COMMUNICATIONS',
     aliases: ['communications', 'communication', 'per21 communications'],
     description: 'Communications office area on the PER21 ground floor'
@@ -120,7 +121,7 @@ const per21PublicPlaces = [
     buildingId: 'PER21',
     floor: 0,
     capacity: null,
-    nearestEntranceId: 'PER21_MAIN_ENTRANCE',
+    nearestEntranceId: getNearestPer21EntranceForNode('PER21_RECEPTION'),
     indoorNodeId: 'PER21_RECEPTION',
     aliases: ['reception', 'front desk', 'per21 reception'],
     description: 'Reception area on the PER21 ground floor'
@@ -131,7 +132,7 @@ const per21PublicPlaces = [
     buildingId: 'PER21',
     floor: 0,
     capacity: null,
-    nearestEntranceId: 'PER21_END_SIDE_ENTRANCE',
+    nearestEntranceId: getNearestPer21EntranceForNode('PER21_ASEA'),
     indoorNodeId: 'PER21_ASEA',
     aliases: ['asea', 'per21 asea'],
     description: 'ASEA office area near the PER22 side of PER21'
