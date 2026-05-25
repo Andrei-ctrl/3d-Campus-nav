@@ -15,10 +15,15 @@ const WING_LETTERS = ['B', 'C', 'D', 'E', 'F'];
 export const PER21_BACK_CLASSROOM_Z = 71;
 export const PER21_FRONT_UPPER_Z = 41;
 
-/** Main hall routing from PER21 main entrance (local metres). */
+/** Distance from front facade to main hall center (local metres). */
+export const PER21_MAIN_HALL_CENTER_DEPTH = 15;
+/** Lateral offset from hall center to A/B (right) or C (left) wing turn. */
+export const PER21_MAIN_HALL_STAIRS_OFFSET = 7.5;
+/** Plan length of each main-entrance stair run (local metres). */
+export const PER21_MAIN_STAIRS_RUN_LENGTH = 10;
 export const PER21_MAIN_HALL_X = 110;
-export const PER21_MAIN_HALL_SPINE_LENGTH = 20;
-export const PER21_MAIN_HALL_TURN_OFFSET = 12;
+export const PER21_MAIN_HALL_SPINE_LENGTH = PER21_MAIN_HALL_CENTER_DEPTH;
+export const PER21_MAIN_HALL_TURN_OFFSET = PER21_MAIN_HALL_STAIRS_OFFSET;
 /** Stairs begin this far inside from the front facade (not at the door). */
 export const PER21_MAIN_STAIRS_DEPTH = 15;
 

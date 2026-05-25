@@ -303,31 +303,41 @@ export function anchorRouteCameraDebug(routeGroup, camera, routeState, scene) {
   return routeState;
 }
 
-export function alignARRouteForSession(routeState, camera, scene, options = {}) {
+let pendingRouteAlign = null;
+
+export function scheduleARRouteAlign(routeState, camera, scene, options = {}) {
   if (!routeState || !camera) {
-    return routeState;
+    return;
   }
+
+  pendingRouteAlign = {
+    routeState,
+    camera,
+    scene,
+    options,
+    frames: 0
+  };
+}
+
+export function tickARRouteAlign() {
+  if (!pendingRouteAlign) {
+    return;
+  }
+
+  pendingRouteAlign.frames += 1;
+
+  if (pendingRouteAlign.frames < 3) {
+    return;
+  }
+
+  const { routeState, camera, scene, options } = pendingRouteAlign;
+  pendingRouteAlign = null;
 
   const arMode = options.arMode ?? 'anchor-relative';
 
   if (arMode === 'camera-debug') {
-    return anchorRouteCameraDebug(routeState.routeGroup, camera, routeState, scene);
-  }
-
-  let frames = 0;
-
-  const alignWhenReady = () => {
-    if (!routeState.routeGroup) {
-      return;
-    }
-
-    frames += 1;
-
-    if (frames < 4) {
-      requestAnimationFrame(alignWhenReady);
-      return;
-    }
-
+    anchorRouteCameraDebug(routeState.routeGroup, camera, routeState, scene);
+  } else {
     anchorRouteToCurrentCamera(
       routeState.routeGroup,
       camera,
@@ -335,10 +345,21 @@ export function alignARRouteForSession(routeState, camera, scene, options = {}) 
       scene,
       { instruction: 'Follow the green route on the ground' }
     );
-    routeState.onUpdate?.(routeState);
-  };
+  }
 
-  requestAnimationFrame(alignWhenReady);
+  routeState.onUpdate?.(routeState);
+}
+
+export function alignARRouteForSession(routeState, camera, scene, options = {}) {
+  if (!routeState || !camera) {
+    return routeState;
+  }
+
+  if ((options.arMode ?? 'anchor-relative') === 'camera-debug') {
+    return anchorRouteCameraDebug(routeState.routeGroup, camera, routeState, scene);
+  }
+
+  scheduleARRouteAlign(routeState, camera, scene, options);
   return routeState;
 }
 

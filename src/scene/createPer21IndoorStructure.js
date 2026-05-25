@@ -4,6 +4,7 @@ import {
   PER21_BACK_CLASSROOM_Z,
   PER21_LAYOUT_SIZES,
   PER21_MAIN_HALL_X,
+  PER21_MAIN_HALL_STAIRS_OFFSET,
   PER21_MAIN_STAIRS_Z,
   per21CubicFirstFloorRooms,
   per21ClassroomFirstFloorRooms,
@@ -138,7 +139,7 @@ function createSideVerticalCores() {
 
 function createMainEntranceStairShaft() {
   return createVerticalShaft(
-    PER21_MAIN_HALL_X + 2.5,
+    PER21_MAIN_HALL_X + PER21_MAIN_HALL_STAIRS_OFFSET,
     PER21_MAIN_STAIRS_Z,
     'PER21_STAIRS_PER21_MAIN_ENTRANCE_SHAFT',
     'PER21 main entrance stairs — 15 m inside from facade',

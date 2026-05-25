@@ -4,8 +4,11 @@ import {
   PER21_SIDE_ENTRANCE_CORES,
   PER21_BACK_CLASSROOM_Z,
   PER21_MAIN_HALL_X,
+  PER21_MAIN_HALL_CENTER_DEPTH,
   PER21_MAIN_HALL_SPINE_LENGTH,
+  PER21_MAIN_HALL_STAIRS_OFFSET,
   PER21_MAIN_HALL_TURN_OFFSET,
+  PER21_MAIN_STAIRS_RUN_LENGTH,
   PER21_MAIN_STAIRS_Z,
   per21CorridorStops
 } from './per21Layout.js';
@@ -35,10 +38,11 @@ const CLASSROOM_Z = PER21_BACK_CLASSROOM_Z;
 const INSIDE_Z = CORE_Z - 2;
 const MAX_FLOOR = 4;
 
-const MAIN_HALL_CENTER_Z = FRONT_Z + PER21_MAIN_HALL_SPINE_LENGTH;
-const MAIN_HALL_APPROACH_Z = FRONT_Z + PER21_MAIN_HALL_SPINE_LENGTH / 2;
-const MAIN_HALL_LEFT_X = PER21_MAIN_HALL_X - PER21_MAIN_HALL_TURN_OFFSET;
-const MAIN_HALL_RIGHT_X = PER21_MAIN_HALL_X + PER21_MAIN_HALL_TURN_OFFSET;
+const MAIN_HALL_CENTER_Z = FRONT_Z + PER21_MAIN_HALL_CENTER_DEPTH;
+const MAIN_HALL_APPROACH_Z = FRONT_Z + PER21_MAIN_HALL_CENTER_DEPTH / 2;
+const MAIN_HALL_LEFT_X = PER21_MAIN_HALL_X - PER21_MAIN_HALL_STAIRS_OFFSET;
+const MAIN_HALL_RIGHT_X = PER21_MAIN_HALL_X + PER21_MAIN_HALL_STAIRS_OFFSET;
+const MAIN_STAIRS_X = PER21_MAIN_HALL_X + PER21_MAIN_HALL_STAIRS_OFFSET;
 
 const centerSpineAnchors = buildCenterSpineAnchors();
 const centerSpineSegments = buildCenterSpineSegments();
@@ -201,8 +205,8 @@ function createMainHallNodes() {
       ),
       node(
         mainHallStairsLandId(floor),
-        PER21_MAIN_HALL_X,
-        PER21_MAIN_STAIRS_Z,
+        MAIN_STAIRS_X,
+        MAIN_HALL_CENTER_Z,
         floor,
         `Main hall stairs landing floor ${floor + 1}`,
         'corridor'
@@ -234,8 +238,7 @@ function createMainHallEdges() {
   const bSpineX = corridorStopX('B_ROOMS');
   const edges = [
     ['PER21_MAIN_ENTRANCE', 'PER21_MAIN_HALL_APPROACH'],
-    ['PER21_MAIN_HALL_APPROACH', mainHallCenterId(0)],
-    ['PER21_MAIN_HALL_APPROACH', mainHallStairsLandId(0)]
+    ['PER21_MAIN_HALL_APPROACH', mainHallCenterId(0)]
   ];
 
   floors.forEach((floor) => {
@@ -247,15 +250,14 @@ function createMainHallEdges() {
     edges.push(
       [centerId, leftId],
       [leftId, centerSpineId(floor, nearestAnchor(centerSpineAnchors, cSpineX))],
+      [centerId, rightId],
+      [rightId, stairsLandId],
       [stairsLandId, `${mainStairs}_F${floor}`],
       [`${mainStairs}_F${floor}`, stairsLandId]
     );
 
     if (floor > 0) {
-      edges.push(
-        [stairsLandId, rightId],
-        [rightId, centerSpineId(floor, nearestAnchor(centerSpineSegments.abWing, bSpineX))]
-      );
+      edges.push([stairsLandId, rightId]);
     }
 
     if (PER21_CLASSROOM_ROW_FLOORS.includes(floor)) {
@@ -396,8 +398,8 @@ function createVerticalNodes() {
   const mainStairNodes = floors.flatMap((floor) => [
     node(
       `PER21_STAIRS_PER21_MAIN_ENTRANCE_F${floor}`,
-      PER21_MAIN_HALL_X + 2.5,
-      PER21_MAIN_STAIRS_Z,
+      MAIN_STAIRS_X,
+      MAIN_HALL_CENTER_Z,
       floor,
       `Main entrance stairs floor ${floor + 1}`,
       'stairs'
