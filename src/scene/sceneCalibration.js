@@ -17,7 +17,7 @@ export const defaultSceneCalibration = {
   markersScale: 1,
   groundScale: 1,
   routesScale: 1,
-  arScale: 0.05,
+  arScale: 1,
   arOffsetX: 0,
   arOffsetY: 0,
   arOffsetZ: -1.5,
@@ -96,6 +96,11 @@ export function sanitizeSceneCalibration(raw = {}) {
   // Older builds used arOffsetY=-0.45 to compensate for indoor overlay height; base-Y handles that now.
   if (Math.abs(Number(merged.arOffsetY) - (-0.45)) < 0.01) {
     merged.arOffsetY = defaultSceneCalibration.arOffsetY;
+  }
+
+  // Legacy builds used arScale≈0.05 to cancel desktop globalScale in AR; map coords are metres.
+  if (Number(merged.arScale) > 0 && Number(merged.arScale) <= 0.06) {
+    merged.arScale = 1;
   }
 
   return merged;
@@ -285,19 +290,20 @@ function applyTransformToObject(object, calibration, options = {}) {
     const dx = original.position.x - anchor.x;
     const dz = original.position.z - anchor.z;
 
+    // Desktop calibration scales must not affect AR world placement.
     positionX =
       calibration.arOffsetX +
-      mirrorX * dx * arScale * layoutScale;
+      mirrorX * dx * arScale;
     positionY =
       calibration.arOffsetY +
-      (original.position.y - getArBaseY(groupName)) * arScale * layoutScale;
+      (original.position.y - getArBaseY(groupName)) * arScale;
     positionZ =
       calibration.arOffsetZ -
-      dz * arScale * layoutScale;
+      dz * arScale;
 
-    scaleX = original.scale.x * arScale * layoutScale;
-    scaleY = original.scale.y * arScale * layoutScale;
-    scaleZ = original.scale.z * arScale * layoutScale;
+    scaleX = original.scale.x * arScale;
+    scaleY = original.scale.y * arScale;
+    scaleZ = original.scale.z * arScale;
   }
 
   object.position.set(positionX, positionY, positionZ);
