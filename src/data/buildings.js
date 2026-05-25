@@ -43,7 +43,7 @@ export const buildings = [
     name: "Mensa Pérolles",
     type: "Building",
     description: "Mensa Pérolles building, located on the opposite side of Bd de Pérolles from PER21",
-    position: { x: 160.07, y: 0, z: 27.53 },
+    position: { x: 160.07, y: 0, z: 17.53 },
     size: { length: 62, width: 20, height: buildingHeight(4) },
     floors: 4,
     rotationDeg: 90,

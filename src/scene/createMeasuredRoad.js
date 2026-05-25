@@ -83,7 +83,7 @@ export function createMensaPer17Road(scene) {
     It is intentionally placed closer to Mensa than PER17.
   */
   const mensaPer17Road = createRoadMeshFromCenter(
-    { x: 178.441, z: 16.924 },
+    { x: 178.441, z: 6.924 },
     125,
     6,
     90,

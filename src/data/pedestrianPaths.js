@@ -3,8 +3,8 @@ import { getEntrancePosition } from './entranceUtils.js';
 const FRONT_ROAD_Z = 30;
 const PER21_EAST_X = 82;
 const MENSA_EAST_PATH_X = 175;
-const MENSA_NORTH_PATH_Z = 60;
-const MENSA_SOUTH_PATH_Z = -10;
+const MENSA_NORTH_PATH_Z = 50;
+const MENSA_SOUTH_PATH_Z = -20;
 
 function entrancePoint(entranceId) {
   const position = getEntrancePosition(entranceId);

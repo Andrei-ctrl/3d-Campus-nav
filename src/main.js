@@ -214,7 +214,10 @@ function renderOutdoorARRouteFromLatest(calibration = getSceneCalibration()) {
     latestOutdoorARRoute.anchorPosition,
     {
       scale: calibration.arScale ?? 1,
-      arMirrorX: calibration.arMirrorX ?? -1
+      arMirrorX: calibration.arMirrorX ?? -1,
+      camera,
+      alignToCamera: isARSessionRunning,
+      originOffset: { x: 0, y: 0, z: 0 }
     }
   );
 
