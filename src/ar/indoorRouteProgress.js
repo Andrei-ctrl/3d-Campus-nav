@@ -455,7 +455,7 @@ export function prepareIndoorARRoute(scene, routeConfig, callbacks = {}) {
   routeState.onUpdate = callbacks.onUpdate ?? null;
   routeState.onInstruction = callbacks.onInstruction ?? null;
 
-  if (routeConfig.autoAlign !== false && callbacks.camera) {
+  if (routeConfig.autoAlign === true && callbacks.camera) {
     anchorRouteToCurrentCamera(
       group,
       callbacks.camera,

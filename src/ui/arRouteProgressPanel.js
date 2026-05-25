@@ -71,9 +71,10 @@ export function createARRouteProgressPanel({
 
   const refreshUI = (routeState = getRouteState()) => {
     const activeSession = isARSessionActive?.() ?? false;
-    const canAlign = activeSession && routeState && !routeState.aligned;
+    const canAlign = activeSession && routeState;
 
     alignButton.disabled = !canAlign;
+    alignButton.textContent = routeState?.aligned ? 'Re-align AR Route' : 'Align AR Route';
 
     instructionLine.textContent =
       routeState?.instructionText || 'Start AR, then align the route at the entrance.';
@@ -90,7 +91,7 @@ export function createARRouteProgressPanel({
   alignButton.addEventListener('click', () => {
     const routeState = getRouteState();
 
-    if (!routeState || routeState.aligned || !isARSessionActive?.()) {
+    if (!routeState || !isARSessionActive?.()) {
       return;
     }
 
