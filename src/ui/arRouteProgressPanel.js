@@ -122,7 +122,7 @@ export function createARRouteProgressPanel({
     refreshUI,
     setPrepared: (hasRoute) => {
       if (!hasRoute) {
-        instructionLine.textContent = 'Show a route to a classroom before starting AR.';
+        instructionLine.textContent = 'Show a route before starting AR.';
       }
       refreshUI();
     },

@@ -1,51 +1,24 @@
 const STORAGE_KEY = 'sceneCalibration';
 const LEGACY_STORAGE_KEY = 'arCalibration';
 
+// Map coordinates are metres; globalScale shrinks the whole scene for desktop viewing.
+const AR_SCALE = 1;
+
 export const defaultSceneCalibration = {
-  globalScale: 1,
+  globalScale: 0.05,
   offsetX: 0,
   offsetY: 0,
   offsetZ: 0,
-  pivotX: 0,
-  pivotY: 0,
-  pivotZ: 0,
-  buildingsScale: 1,
-  per21IndoorScale: 1,
-  per22IndoorScale: 1,
-  per17IndoorScale: 1,
-  pathsScale: 1,
-  markersScale: 1,
-  groundScale: 1,
-  routesScale: 1,
-  arScale: 1,
-  arOffsetX: 0,
-  arOffsetY: 0,
-  arOffsetZ: -1.5,
   arMirrorX: -1,
   mode: 'anchor-relative',
   livePreview: true
 };
 
 const CALIBRATION_LIMITS = {
-  globalScale: { min: 0.05, max: 15 },
+  globalScale: { min: 0.01, max: 30 },
   offsetX: { min: -500, max: 500 },
   offsetY: { min: -100, max: 100 },
-  offsetZ: { min: -500, max: 500 },
-  pivotX: { min: -500, max: 500 },
-  pivotY: { min: -100, max: 100 },
-  pivotZ: { min: -500, max: 500 },
-  buildingsScale: { min: 0.1, max: 5 },
-  per21IndoorScale: { min: 0.1, max: 5 },
-  per22IndoorScale: { min: 0.1, max: 5 },
-  per17IndoorScale: { min: 0.1, max: 5 },
-  pathsScale: { min: 0.1, max: 5 },
-  markersScale: { min: 0.1, max: 5 },
-  groundScale: { min: 0.1, max: 5 },
-  routesScale: { min: 0.1, max: 5 },
-  arScale: { min: 0.001, max: 2 },
-  arOffsetX: { min: -50, max: 50 },
-  arOffsetY: { min: -50, max: 50 },
-  arOffsetZ: { min: -50, max: 50 }
+  offsetZ: { min: -500, max: 500 }
 };
 
 function clampCalibrationValue(key, value, fallback) {
@@ -70,38 +43,21 @@ export function sanitizeSceneCalibration(raw = {}) {
     ...raw
   };
 
-  Object.keys(defaultSceneCalibration).forEach((key) => {
-    if (key === 'mode' || key === 'livePreview') {
-      return;
-    }
-
-    if (key === 'arMirrorX') {
-      merged.arMirrorX = merged.arMirrorX === 1 ? 1 : -1;
-      return;
-    }
-
-    merged[key] = clampCalibrationValue(
-      key,
-      merged[key],
-      defaultSceneCalibration[key]
-    );
-  });
+  merged.globalScale = clampCalibrationValue(
+    'globalScale',
+    merged.globalScale,
+    defaultSceneCalibration.globalScale
+  );
+  merged.offsetX = clampCalibrationValue('offsetX', merged.offsetX, 0);
+  merged.offsetY = clampCalibrationValue('offsetY', merged.offsetY, 0);
+  merged.offsetZ = clampCalibrationValue('offsetZ', merged.offsetZ, 0);
+  merged.arMirrorX = merged.arMirrorX === 1 ? 1 : -1;
 
   if (merged.mode !== 'camera-debug' && merged.mode !== 'anchor-relative') {
     merged.mode = defaultSceneCalibration.mode;
   }
 
   merged.livePreview = merged.livePreview !== false;
-
-  // Older builds used arOffsetY=-0.45 to compensate for indoor overlay height; base-Y handles that now.
-  if (Math.abs(Number(merged.arOffsetY) - (-0.45)) < 0.01) {
-    merged.arOffsetY = defaultSceneCalibration.arOffsetY;
-  }
-
-  // Legacy builds used arScale≈0.05 to cancel desktop globalScale in AR; map coords are metres.
-  if (Number(merged.arScale) > 0 && Number(merged.arScale) <= 0.06) {
-    merged.arScale = 1;
-  }
 
   return merged;
 }
@@ -128,11 +84,11 @@ function migrateLegacyCalibration(legacy = {}) {
   }
 
   return {
-    arScale: legacy.scale ?? defaultSceneCalibration.arScale,
-    arOffsetX: legacy.x ?? defaultSceneCalibration.arOffsetX,
-    arOffsetY: legacy.y ?? defaultSceneCalibration.arOffsetY,
-    arOffsetZ: legacy.z ?? defaultSceneCalibration.arOffsetZ,
-    mode: legacy.mode ?? defaultSceneCalibration.mode
+    globalScale: legacy.scale ?? undefined,
+    offsetX: legacy.x ?? undefined,
+    offsetY: legacy.y ?? undefined,
+    offsetZ: legacy.z ?? undefined,
+    mode: legacy.mode ?? undefined
   };
 }
 
@@ -154,7 +110,13 @@ export function loadSceneCalibration() {
 }
 
 export function getSceneCalibration() {
-  return sceneCalibration;
+  return {
+    ...sceneCalibration,
+    arScale: AR_SCALE,
+    arOffsetX: 0,
+    arOffsetY: 0,
+    arOffsetZ: 0
+  };
 }
 
 export function setSceneCalibration(nextCalibration) {
@@ -227,57 +189,17 @@ function getArBaseY(groupName) {
   return AR_BASE_Y_BY_GROUP[groupName] ?? 0;
 }
 
-function getGroupScale(groupName, calibration) {
-  switch (groupName) {
-    case 'buildings':
-      return calibration.buildingsScale;
-    case 'per21Indoor':
-      return calibration.buildingsScale * calibration.per21IndoorScale;
-    case 'per22Indoor':
-      return calibration.buildingsScale * calibration.per22IndoorScale;
-    case 'per17Indoor':
-      return calibration.buildingsScale * calibration.per17IndoorScale;
-    case 'paths':
-      return calibration.pathsScale;
-    case 'markers':
-      return calibration.markersScale;
-    case 'ground':
-      return calibration.groundScale;
-    case 'routes':
-      // Keep route lines aligned with roads/paths; routesScale is a multiplier only.
-      return calibration.pathsScale * calibration.routesScale;
-    default:
-      return 1;
-  }
-}
-
 function applyTransformToObject(object, calibration, options = {}) {
   const original = originalTransforms.get(object);
 
   if (!original) return;
 
   const groupName = object.userData.calibrationGroup || 'buildings';
-  const groupScale = getGroupScale(groupName, calibration);
-  const globalScale = calibration.globalScale;
-  const layoutScale = globalScale * groupScale;
-  const pivot = options.pivot || {
-    x: calibration.pivotX,
-    y: calibration.pivotY,
-    z: calibration.pivotZ
-  };
+  const layoutScale = calibration.globalScale;
 
-  let positionX =
-    calibration.offsetX +
-    pivot.x +
-    (original.position.x - pivot.x) * layoutScale;
-  let positionY =
-    calibration.offsetY +
-    pivot.y +
-    (original.position.y - pivot.y) * layoutScale;
-  let positionZ =
-    calibration.offsetZ +
-    pivot.z +
-    (original.position.z - pivot.z) * layoutScale;
+  let positionX = calibration.offsetX + original.position.x * layoutScale;
+  let positionY = calibration.offsetY + original.position.y * layoutScale;
+  let positionZ = calibration.offsetZ + original.position.z * layoutScale;
 
   let scaleX = original.scale.x * layoutScale;
   let scaleY = original.scale.y * layoutScale;
@@ -285,21 +207,14 @@ function applyTransformToObject(object, calibration, options = {}) {
 
   if (options.anchor && isARActive) {
     const anchor = options.anchor.position;
-    const arScale = calibration.arScale;
+    const arScale = AR_SCALE;
     const mirrorX = calibration.arMirrorX ?? -1;
     const dx = original.position.x - anchor.x;
     const dz = original.position.z - anchor.z;
 
-    // Desktop calibration scales must not affect AR world placement.
-    positionX =
-      calibration.arOffsetX +
-      mirrorX * dx * arScale;
-    positionY =
-      calibration.arOffsetY +
-      (original.position.y - getArBaseY(groupName)) * arScale;
-    positionZ =
-      calibration.arOffsetZ -
-      dz * arScale;
+    positionX = mirrorX * dx * arScale;
+    positionY = (original.position.y - getArBaseY(groupName)) * arScale;
+    positionZ = -dz * arScale;
 
     scaleX = original.scale.x * arScale;
     scaleY = original.scale.y * arScale;
@@ -311,12 +226,12 @@ function applyTransformToObject(object, calibration, options = {}) {
 }
 
 export function applySceneCalibration(options = {}) {
-  const calibration = options.calibration || sceneCalibration;
+  const calibration = options.calibration || getSceneCalibration();
   const anchor = options.anchor || activeAnchor;
 
   objectGroups.forEach((objects) => {
     objects.forEach((object) => {
-      applyTransformToObject(object, calibration, { anchor, pivot: options.pivot });
+      applyTransformToObject(object, calibration, { anchor });
     });
   });
 }
@@ -331,7 +246,7 @@ export function restoreSceneCalibration() {
   activeAnchor = null;
 }
 
-export function enterARCalibrationView(anchor, calibration = sceneCalibration) {
+export function enterARCalibrationView(anchor, calibration = getSceneCalibration()) {
   isARActive = true;
   activeAnchor = anchor;
   applySceneCalibration({ calibration, anchor });
@@ -341,15 +256,6 @@ export function exitARCalibrationView() {
   isARActive = false;
   activeAnchor = null;
   applySceneCalibration();
-}
-
-export function setCalibrationPivot(pivot) {
-  sceneCalibration = {
-    ...sceneCalibration,
-    pivotX: pivot.x,
-    pivotY: pivot.y,
-    pivotZ: pivot.z
-  };
 }
 
 export function resetSceneCalibration() {

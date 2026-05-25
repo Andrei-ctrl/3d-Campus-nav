@@ -8,49 +8,12 @@ import {
   setSceneCalibration
 } from '../scene/sceneCalibration.js';
 
-const CONTROL_GROUPS = [
-  {
-    title: 'Whole scene',
-    controls: [
-      { key: 'globalScale', label: 'Global scale', min: 0.01, sliderMax: 30, step: 0.01, wide: true },
-      { key: 'offsetX', label: 'Offset X (m)', min: -500, sliderMax: 500, step: 0.5 },
-      { key: 'offsetY', label: 'Offset Y (m)', min: -100, sliderMax: 100, step: 0.1 },
-      { key: 'offsetZ', label: 'Offset Z (m)', min: -500, sliderMax: 500, step: 0.5 },
-      { key: 'pivotX', label: 'Pivot X (m)', min: -500, sliderMax: 500, step: 0.5 },
-      { key: 'pivotY', label: 'Pivot Y (m)', min: -100, sliderMax: 100, step: 0.1 },
-      { key: 'pivotZ', label: 'Pivot Z (m)', min: -500, sliderMax: 500, step: 0.5 }
-    ]
-  },
-  {
-    title: 'Building groups',
-    controls: [
-      { key: 'buildingsScale', label: 'Building shells', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'per21IndoorScale', label: 'PER21 interior × shells', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'per22IndoorScale', label: 'PER22 interior × shells', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'per17IndoorScale', label: 'PER17 interior × shells', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'markersScale', label: 'Markers & labels', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'pathsScale', label: 'Roads & paths', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'groundScale', label: 'Ground plane', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'routesScale', label: 'Route lines × paths', min: 0.1, sliderMax: 5, step: 0.01, wide: true }
-    ]
-  },
-  {
-    title: 'AR overlay',
-    controls: [
-      { key: 'arScale', label: 'AR scale', min: 0.001, sliderMax: 2, step: 0.001, wide: true },
-      { key: 'arOffsetX', label: 'AR offset X', min: -50, sliderMax: 50, step: 0.05 },
-      { key: 'arOffsetY', label: 'AR offset Y', min: -50, sliderMax: 50, step: 0.05 },
-      { key: 'arOffsetZ', label: 'AR offset Z', min: -50, sliderMax: 50, step: 0.05 }
-    ]
-  }
+const CALIBRATION_CONTROLS = [
+  { key: 'globalScale', label: 'Global scale', min: 0.01, sliderMax: 30, step: 0.01, wide: true },
+  { key: 'offsetX', label: 'Offset X (m)', min: -500, sliderMax: 500, step: 0.5 },
+  { key: 'offsetY', label: 'Offset Y (m)', min: -100, sliderMax: 100, step: 0.1 },
+  { key: 'offsetZ', label: 'Offset Z (m)', min: -500, sliderMax: 500, step: 0.5 }
 ];
-
-function createSectionTitle(text) {
-  const title = document.createElement('div');
-  title.className = 'calibration-section-title';
-  title.textContent = text;
-  return title;
-}
 
 function syncControlValues(controls, calibration) {
   Object.entries(controls).forEach(([key, control]) => {
@@ -61,7 +24,7 @@ function syncControlValues(controls, calibration) {
   });
 }
 
-function readCalibrationFromControls(controls, modeSelect, livePreviewCheckbox, pivotSelect) {
+function readCalibrationFromControls(controls, modeSelect, livePreviewCheckbox) {
   const next = {
     ...getSceneCalibration(),
     mode: modeSelect.value,
@@ -72,19 +35,10 @@ function readCalibrationFromControls(controls, modeSelect, livePreviewCheckbox, 
     next[key] = Number(controls[key].number.value);
   });
 
-  const selectedPivotOption = pivotSelect?.selectedOptions?.[0];
-  const pivot = selectedPivotOption?.dataset.pivot
-    ? JSON.parse(selectedPivotOption.dataset.pivot)
-    : { x: next.pivotX, y: next.pivotY, z: next.pivotZ };
-
-  next.pivotX = pivot.x;
-  next.pivotY = pivot.y;
-  next.pivotZ = pivot.z;
-
   return next;
 }
 
-export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle, onFitView } = {}) {
+export function createCalibrationPanel({ onApply, onMirrorToggle, onFitView } = {}) {
   const container = document.createElement('div');
   container.id = 'ar-calibration-panel';
   container.className = 'ar-calibration-panel calibration-panel';
@@ -102,7 +56,7 @@ export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle, 
   const help = document.createElement('p');
   help.className = 'calibration-help';
   help.textContent =
-    'Align the 3D prototype with the real campus. Global scale affects everything; building shells and interiors scale together by default (interior sliders are multipliers on top of shells).';
+    'One scale and offset for the whole campus model. Default scale is 0.05 (map metres). AR routes use real-world metres and are not affected by this scale.';
   content.appendChild(help);
 
   const modeLabel = document.createElement('label');
@@ -123,30 +77,6 @@ export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle, 
 
   content.appendChild(modeLabel);
   content.appendChild(modeSelect);
-
-  const pivotLabel = document.createElement('label');
-  pivotLabel.textContent = 'Scale pivot';
-
-  const pivotSelect = document.createElement('select');
-  pivotSelect.id = 'calibration-pivot';
-
-  [
-    { value: 'origin', text: 'Map origin (0, 0, 0)', pivot: { x: 0, y: 0, z: 0 } },
-    ...anchors.map((anchor) => ({
-      value: anchor.id,
-      text: anchor.name,
-      pivot: anchor.position
-    }))
-  ].forEach((item) => {
-    const option = document.createElement('option');
-    option.value = item.value;
-    option.textContent = item.text;
-    option.dataset.pivot = JSON.stringify(item.pivot);
-    pivotSelect.appendChild(option);
-  });
-
-  content.appendChild(pivotLabel);
-  content.appendChild(pivotSelect);
 
   const livePreviewCheckbox = document.createElement('input');
   livePreviewCheckbox.type = 'checkbox';
@@ -171,8 +101,7 @@ export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle, 
       const nextCalibration = readCalibrationFromControls(
         controls,
         modeSelect,
-        livePreviewCheckbox,
-        pivotSelect
+        livePreviewCheckbox
       );
       setSceneCalibration(nextCalibration);
       applySceneCalibration();
@@ -234,11 +163,8 @@ export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle, 
     controls[key] = { range, number };
   };
 
-  CONTROL_GROUPS.forEach((group) => {
-    content.appendChild(createSectionTitle(group.title));
-    group.controls.forEach((control) => {
-      addCalibrationControl(control.key, control.label, control);
-    });
+  CALIBRATION_CONTROLS.forEach((control) => {
+    addCalibrationControl(control.key, control.label, control);
   });
 
   const flipButton = document.createElement('button');
@@ -270,8 +196,7 @@ export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle, 
     const nextCalibration = readCalibrationFromControls(
       controls,
       modeSelect,
-      livePreviewCheckbox,
-      pivotSelect
+      livePreviewCheckbox
     );
     setSceneCalibration(nextCalibration);
     saveSceneCalibration();
@@ -285,7 +210,6 @@ export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle, 
     resetSceneCalibration();
     modeSelect.value = getSceneCalibration().mode;
     livePreviewCheckbox.checked = getSceneCalibration().livePreview;
-    pivotSelect.value = 'origin';
     syncControlValues(controls, getSceneCalibration());
     flipButton.textContent = `Flip scene ↔ (${getSceneMirrorLabel()})`;
     onApply?.(getSceneCalibration());
@@ -293,7 +217,6 @@ export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle, 
   });
 
   livePreviewCheckbox.addEventListener('change', schedulePreview);
-  pivotSelect.addEventListener('change', schedulePreview);
 
   content.appendChild(applyButton);
   content.appendChild(resetButton);

@@ -155,7 +155,7 @@ let latestRoutePlan = null;
 let latestAnchor = null;
 let latestToDestination = null;
 let latestHasIndoorLeg = false;
-let latestIndoorARRoute = null;
+let latestARRoute = null;
 let outdoorTrackingPanel = null;
 let arRouteProgressPanel = null;
 let indoorARRouteState = null;
@@ -169,7 +169,7 @@ function updateMirrorButtons() {
 }
 
 function refreshIndoorARRouteForMirror() {
-  if (!latestIndoorARRoute) {
+  if (!latestARRoute) {
     return;
   }
 
@@ -179,7 +179,7 @@ function refreshIndoorARRouteForMirror() {
 
   const calibration = getSceneCalibration();
   indoorARRouteState = prepareIndoorARRoute(scene, {
-    ...latestIndoorARRoute,
+    ...latestARRoute,
     arOptions: {
       arMirrorX: calibration.arMirrorX ?? -1,
       arScale: calibration.arScale
@@ -280,12 +280,15 @@ function buildRouteSegments(routePlan, toDestination = null) {
   return segments;
 }
 
-function buildIndoorARRoute(routePlan, toDestination, fromEntranceId = null) {
-  if (!toDestination || toDestination.type !== 'room') {
+function buildARRoute(routePlan, toDestination, fromEntranceId = null) {
+  if (!routePlan) {
     return null;
   }
 
-  const segments = buildRouteSegments(routePlan, toDestination);
+  const segments = buildRouteSegments(
+    routePlan,
+    toDestination?.type === 'room' ? toDestination : null
+  );
 
   if (!segments.length) {
     return null;
@@ -302,10 +305,14 @@ function buildIndoorARRoute(routePlan, toDestination, fromEntranceId = null) {
     return null;
   }
 
+  const destinationName = toDestination?.room?.name
+    ?? toDestination?.name
+    ?? 'your destination';
+
   return {
     segments,
-    buildingId: toDestination.room.buildingId,
-    destinationName: toDestination.room.name,
+    buildingId: toDestination?.room?.buildingId ?? toDestination?.id ?? null,
+    destinationName,
     anchorPosition,
     entranceNodeId: firstNodeId
   };
@@ -322,7 +329,7 @@ function storeLatestRoutePlan(routePlan, toDestination, fromEntranceId = null) {
   latestToDestination = toDestination ?? null;
   latestHasIndoorLeg = (routePlan.indoorPath?.length ?? 0) > 0
     || (routePlan.indoorSegments?.length ?? 0) > 0;
-  latestIndoorARRoute = buildIndoorARRoute(routePlan, toDestination, fromEntranceId);
+  latestARRoute = buildARRoute(routePlan, toDestination, fromEntranceId);
 
   if (latestOutdoorPath.length >= 2) {
     outdoorTrackingPanel?.startTracking?.();
@@ -331,7 +338,7 @@ function storeLatestRoutePlan(routePlan, toDestination, fromEntranceId = null) {
   }
 
   outdoorTrackingPanel?.refreshUI?.();
-  arRouteProgressPanel?.setPrepared?.(!!latestIndoorARRoute);
+  arRouteProgressPanel?.setPrepared?.(!!latestARRoute);
 }
 
 function clearLatestRoutePlan() {
@@ -339,7 +346,7 @@ function clearLatestRoutePlan() {
   latestOutdoorPath = [];
   latestToDestination = null;
   latestHasIndoorLeg = false;
-  latestIndoorARRoute = null;
+  latestARRoute = null;
   latestAnchor = null;
   outdoorTrackingPanel?.stopTracking?.();
   clearIndoorARRouteState();
@@ -1062,10 +1069,10 @@ async function createARButton() {
 
   button.addEventListener('click', async () => {
   try {
-    const hasIndoorRoute = !!latestIndoorARRoute;
+    const hasARRoute = !!latestARRoute;
 
-    if (!hasIndoorRoute) {
-      alert('Please select a destination room and click Show Route before starting AR.');
+    if (!hasARRoute) {
+      alert('Please show a route before starting AR.');
       button.textContent = 'Start AR';
       return;
     }
@@ -1075,6 +1082,7 @@ async function createARButton() {
     clearIndoorARRouteState();
     clearARRoute(scene);
     outdoorTrackingPanel?.stopTracking?.();
+    applySceneCalibration();
 
     const session = await startARSession(renderer);
 
@@ -1082,38 +1090,39 @@ async function createARButton() {
 
     enterARViewMode();
 
-    if (hasIndoorRoute) {
-      const calibration = getSceneCalibration();
+    const calibration = getSceneCalibration();
 
-      indoorARRouteState = prepareIndoorARRoute(scene, {
-        ...latestIndoorARRoute,
-        arOptions: {
-          arMirrorX: calibration.arMirrorX ?? -1,
-          arScale: calibration.arScale
-        }
-      }, {
-        camera,
-        onUpdate: (state) => arRouteProgressPanel?.refreshUI?.(state),
-        onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
-      });
-
-      if (!indoorARRouteState) {
-        alert('Could not prepare the AR route. Check that a valid route is shown on the map.');
-        isARSessionRunning = false;
-        await session.end();
-        exitARViewMode();
-        button.textContent = 'Start AR';
-        return;
+    indoorARRouteState = prepareIndoorARRoute(scene, {
+      ...latestARRoute,
+      arOptions: {
+        arMirrorX: calibration.arMirrorX ?? -1,
+        arScale: calibration.arScale
       }
+    }, {
+      camera,
+      onUpdate: (state) => arRouteProgressPanel?.refreshUI?.(state),
+      onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
+    });
 
-      arRouteProgressPanel?.setPrepared?.(true);
-      arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
+    if (!indoorARRouteState) {
+      alert('Could not prepare the AR route. Check that a valid route is shown on the map.');
+      isARSessionRunning = false;
+      await session.end();
+      exitARViewMode();
+      applySceneCalibration();
+      button.textContent = 'Start AR';
+      return;
     }
+
+    arRouteProgressPanel?.setPrepared?.(true);
+    arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
 
     session.addEventListener('end', () => {
       isARSessionRunning = false;
       clearIndoorARRouteState();
       exitARViewMode();
+      applySceneCalibration();
+      refreshActiveRoutesAfterCalibration();
 
       if (latestOutdoorPath.length >= 2) {
         outdoorTrackingPanel?.startTracking?.();
@@ -1264,15 +1273,20 @@ function exitARViewMode() {
 
   scene.background = new THREE.Color(0xf7f7f4);
 
-  arHiddenMeshes.forEach((mesh) => {
-    mesh.visible = true;
-  });
   arHiddenMeshes.length = 0;
 
+  setBuildingLayerVisible(areBuildingsVisible);
+  Object.values(entranceMeshes).forEach((mesh) => {
+    mesh.visible = true;
+  });
+  [mainRoad, mensaPer17Road, ...pedestrianPathMeshes].forEach((mesh) => {
+    if (mesh) {
+      mesh.visible = true;
+    }
+  });
   setIndoorLayerVisible(isIndoorLayerVisible);
   setPer22IndoorLayerVisible(isPer22IndoorLayerVisible);
   setPer17IndoorLayerVisible(isPer17IndoorLayerVisible);
-  setBuildingLayerVisible(areBuildingsVisible);
   setRouteLayerVisible(areRoutesVisible);
   syncLabelLayerVisibility();
   clearARRoute(scene);
@@ -1281,7 +1295,6 @@ function exitARViewMode() {
 setupStaticInfoPanel();
 createLayerToggles();
 createCalibrationPanel({
-  anchors,
   onApply: () => {
     updateMirrorButtons();
     refreshIndoorARRouteForMirror();
