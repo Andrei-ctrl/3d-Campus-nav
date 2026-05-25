@@ -158,7 +158,8 @@ let latestRoutePlan = null;
 let latestAnchor = null;
 let latestToDestination = null;
 let latestHasIndoorLeg = false;
-let latestARRoute = null;
+let latestIndoorARRoute = null;
+let latestOutdoorARRoute = null;
 let outdoorTrackingPanel = null;
 let arRouteProgressPanel = null;
 let indoorARRouteState = null;
@@ -171,16 +172,13 @@ function updateMirrorButtons() {
   mirrorButtonUpdaters.forEach((updater) => updater());
 }
 
-function refreshIndoorARRouteForMirror() {
-  if (!latestARRoute) {
-    return;
+function prepareIndoorARRouteFromLatest(calibration = getSceneCalibration()) {
+  if (!latestIndoorARRoute) {
+    return false;
   }
 
-  clearIndoorARRouteState();
-
-  const calibration = getSceneCalibration();
   indoorARRouteState = prepareIndoorARRoute(scene, {
-    ...latestARRoute,
+    ...latestIndoorARRoute,
     arMode: calibration.mode,
     arOptions: {
       arMirrorX: calibration.arMirrorX ?? -1,
@@ -192,14 +190,59 @@ function refreshIndoorARRouteForMirror() {
     onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
   });
 
-  if (indoorARRouteState && isARSessionRunning && renderer.xr.isPresenting) {
+  if (indoorARRouteState && isARSessionRunning) {
     alignARRouteForSession(indoorARRouteState, camera, scene, {
       arMode: calibration.mode
     });
   }
 
-  arRouteProgressPanel?.setPrepared?.(true);
+  arRouteProgressPanel?.setPrepared?.('indoor');
   arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
+
+  return !!indoorARRouteState;
+}
+
+function renderOutdoorARRouteFromLatest(calibration = getSceneCalibration()) {
+  if (!latestOutdoorARRoute) {
+    return false;
+  }
+
+  renderARRoute(
+    scene,
+    latestOutdoorARRoute.graph,
+    latestOutdoorARRoute.pathNodeIds,
+    latestOutdoorARRoute.anchorPosition,
+    {
+      scale: 0.05 * (calibration.arScale ?? 1),
+      arMirrorX: calibration.arMirrorX ?? -1
+    }
+  );
+
+  arRouteProgressPanel?.setPrepared?.('outdoor');
+  arRouteProgressPanel?.refreshUI?.(null);
+  return true;
+}
+
+function refreshActiveARRoute() {
+  const calibration = getSceneCalibration();
+
+  clearIndoorARRouteState();
+  clearARRoute(scene);
+
+  if (latestIndoorARRoute) {
+    return prepareIndoorARRouteFromLatest(calibration);
+  }
+
+  if (latestOutdoorARRoute) {
+    return renderOutdoorARRouteFromLatest(calibration);
+  }
+
+  arRouteProgressPanel?.setPrepared?.(false);
+  return false;
+}
+
+function refreshIndoorARRouteForMirror() {
+  refreshActiveARRoute();
 }
 
 function handleSceneMirrorToggle() {
@@ -236,25 +279,16 @@ function isDestinationIndoorSegment(segment, toDestination) {
   return segment.path[segment.path.length - 1] === destinationNodeId;
 }
 
-function buildRouteSegments(routePlan, toDestination = null) {
+function buildIndoorARRouteSegments(routePlan, toDestination = null) {
   const segments = [];
   const indoorSegs = routePlan.indoorSegments ?? [];
   const outdoor = routePlan.outdoorPath ?? [];
   const hasOutdoor = outdoor.length >= 2;
 
   if (hasOutdoor) {
-    const sourceIndoor = indoorSegs.find(
-      (segment) => segment.path?.length >= 2 && !isDestinationIndoorSegment(segment, toDestination)
-    ) ?? null;
     const destIndoor = indoorSegs.find(
       (segment) => segment.path?.length >= 2 && isDestinationIndoorSegment(segment, toDestination)
     ) ?? null;
-
-    if (sourceIndoor) {
-      segments.push({ graph: sourceIndoor.graph, pathNodeIds: sourceIndoor.path });
-    }
-
-    segments.push({ graph, pathNodeIds: outdoor });
 
     if (destIndoor) {
       segments.push({ graph: destIndoor.graph, pathNodeIds: destIndoor.path });
@@ -279,12 +313,12 @@ function buildRouteSegments(routePlan, toDestination = null) {
   return segments;
 }
 
-function buildARRoute(routePlan, toDestination, fromEntranceId = null) {
+function buildIndoorARRoute(routePlan, toDestination, fromEntranceId = null) {
   if (!routePlan) {
     return null;
   }
 
-  const segments = buildRouteSegments(
+  const segments = buildIndoorARRouteSegments(
     routePlan,
     toDestination?.type === 'room' ? toDestination : null
   );
@@ -317,6 +351,31 @@ function buildARRoute(routePlan, toDestination, fromEntranceId = null) {
   };
 }
 
+function buildOutdoorARRoute(routePlan, fromEntranceId = null) {
+  const outdoorPath = routePlan?.outdoorPath ?? [];
+
+  if (outdoorPath.length < 2) {
+    return null;
+  }
+
+  const anchorPosition = getEntrancePosition(fromEntranceId ?? outdoorPath[0])
+    ?? graph.nodes[outdoorPath[0]];
+
+  if (!anchorPosition) {
+    return null;
+  }
+
+  return {
+    graph,
+    pathNodeIds: outdoorPath,
+    anchorPosition
+  };
+}
+
+function getActiveARAnchorPosition() {
+  return latestIndoorARRoute?.anchorPosition ?? latestOutdoorARRoute?.anchorPosition ?? null;
+}
+
 function clearIndoorARRouteState() {
   indoorARRouteState = clearIndoorARRoute(scene, indoorARRouteState);
   arRouteProgressPanel?.reset?.();
@@ -328,7 +387,8 @@ function storeLatestRoutePlan(routePlan, toDestination, fromEntranceId = null) {
   latestToDestination = toDestination ?? null;
   latestHasIndoorLeg = (routePlan.indoorPath?.length ?? 0) > 0
     || (routePlan.indoorSegments?.length ?? 0) > 0;
-  latestARRoute = buildARRoute(routePlan, toDestination, fromEntranceId);
+  latestIndoorARRoute = buildIndoorARRoute(routePlan, toDestination, fromEntranceId);
+  latestOutdoorARRoute = buildOutdoorARRoute(routePlan, fromEntranceId);
 
   if (latestOutdoorPath.length >= 2) {
     outdoorTrackingPanel?.startTracking?.();
@@ -337,7 +397,9 @@ function storeLatestRoutePlan(routePlan, toDestination, fromEntranceId = null) {
   }
 
   outdoorTrackingPanel?.refreshUI?.();
-  arRouteProgressPanel?.setPrepared?.(!!latestARRoute);
+  arRouteProgressPanel?.setPrepared?.(
+    latestIndoorARRoute ? 'indoor' : latestOutdoorARRoute ? 'outdoor' : false
+  );
 }
 
 function clearLatestRoutePlan() {
@@ -345,7 +407,8 @@ function clearLatestRoutePlan() {
   latestOutdoorPath = [];
   latestToDestination = null;
   latestHasIndoorLeg = false;
-  latestARRoute = null;
+  latestIndoorARRoute = null;
+  latestOutdoorARRoute = null;
   latestAnchor = null;
   outdoorTrackingPanel?.stopTracking?.();
   clearIndoorARRouteState();
@@ -1080,7 +1143,7 @@ async function createARButton() {
 
   button.addEventListener('click', async () => {
   try {
-    const hasARRoute = !!latestARRoute;
+    const hasARRoute = !!latestIndoorARRoute || !!latestOutdoorARRoute;
 
     if (!hasARRoute) {
       alert('Please show a route before starting AR.');
@@ -1101,22 +1164,7 @@ async function createARButton() {
 
     enterARViewMode();
 
-    const calibration = getSceneCalibration();
-
-    indoorARRouteState = prepareIndoorARRoute(scene, {
-      ...latestARRoute,
-      arMode: calibration.mode,
-      arOptions: {
-        arMirrorX: calibration.arMirrorX ?? -1,
-        arScale: calibration.arScale
-      }
-    }, {
-      camera,
-      onUpdate: (state) => arRouteProgressPanel?.refreshUI?.(state),
-      onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
-    });
-
-    if (!indoorARRouteState) {
+    if (!refreshActiveARRoute()) {
       alert('Could not prepare the AR route. Check that a valid route is shown on the map.');
       isARSessionRunning = false;
       await session.end();
@@ -1125,13 +1173,6 @@ async function createARButton() {
       button.textContent = 'Start AR';
       return;
     }
-
-    alignARRouteForSession(indoorARRouteState, camera, scene, {
-      arMode: calibration.mode
-    });
-
-    arRouteProgressPanel?.setPrepared?.(true);
-    arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
 
     session.addEventListener('end', () => {
       isARSessionRunning = false;
@@ -1274,8 +1315,10 @@ function setARModelVisible(visible) {
   });
 
   if (isARSessionRunning) {
-    if (visible && latestARRoute?.anchorPosition) {
-      enterARCalibrationView({ position: latestARRoute.anchorPosition });
+    const anchorPosition = getActiveARAnchorPosition();
+
+    if (visible && anchorPosition) {
+      enterARCalibrationView({ position: anchorPosition });
     } else {
       exitARCalibrationView();
       applySceneCalibration();
@@ -1300,8 +1343,12 @@ function enterARViewMode() {
     getARSceneModelMeshes().forEach((mesh) => {
       mesh.visible = false;
     });
-  } else if (latestARRoute?.anchorPosition) {
-    enterARCalibrationView({ position: latestARRoute.anchorPosition });
+  } else {
+    const anchorPosition = getActiveARAnchorPosition();
+
+    if (anchorPosition) {
+      enterARCalibrationView({ position: anchorPosition });
+    }
   }
 }
 
