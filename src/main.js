@@ -232,6 +232,12 @@ function refreshActiveARRoute() {
   clearIndoorARRouteState();
   clearARRoute(scene);
 
+  const anchorPosition = getActiveARAnchorPosition();
+
+  if (isARSessionRunning && anchorPosition && !isARModelHiddenInSession) {
+    enterARCalibrationView({ position: anchorPosition }, calibration);
+  }
+
   if (latestIndoorARRoute) {
     return prepareIndoorARRouteFromLatest(calibration);
   }

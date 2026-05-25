@@ -34,6 +34,26 @@ const per21BackEntrance2 = entrancePoint('PER21_BACK_ENTRANCE_2');
 
 export const pedestrianPaths = [
   {
+    id: "PATH_PER21_TO_PER22_DIRECT",
+    name: "Direct outdoor path from PER21 main entrance to PER22",
+    width: 3,
+    color: "#b8b8b8",
+    points: [
+      per21MainEntrance,
+      per22Entrance
+    ]
+  },
+  {
+    id: "PATH_PER21_TO_MENSA_DIRECT",
+    name: "Direct outdoor path from PER21 main entrance to Mensa",
+    width: 3,
+    color: "#b8b8b8",
+    points: [
+      per21MainEntrance,
+      mensaEntrance
+    ]
+  },
+  {
     id: "PATH_PER21_FRONT_SPINE",
     name: "Main pedestrian road in front of PER21",
     width: 3,
