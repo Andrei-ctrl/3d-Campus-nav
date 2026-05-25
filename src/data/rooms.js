@@ -2,27 +2,41 @@ import {
   per21ClassroomNodes,
   per21CubicFirstFloorRooms,
   per21ClassroomFirstFloorRooms,
-  per21UpperFloorRooms
+  per21UpperFloorRooms,
+  PER21_LAYOUT_SIZES
 } from './per21Layout.js';
+
+function formatDimensions(size) {
+  return `${size.length} x ${size.width} m`;
+}
 
 const per21Classrooms = [
   ...per21CubicFirstFloorRooms.map((room) => ({
     roomNumber: room.roomId,
     floor: 1,
     roomType: 'cube',
-    dimensions: '15 x 15 m, two-floor height'
+    dimensions: `${formatDimensions(room.size ?? {
+      length: PER21_LAYOUT_SIZES.cubeLength,
+      width: PER21_LAYOUT_SIZES.cubeWidth
+    })}, two-floor height`
   })),
   ...per21ClassroomFirstFloorRooms.map((room) => ({
     roomNumber: room.roomId,
     floor: 1,
     roomType: 'classroom',
-    dimensions: '10 x 10 m'
+    dimensions: formatDimensions(room.size ?? {
+      length: PER21_LAYOUT_SIZES.classLength,
+      width: PER21_LAYOUT_SIZES.classWidth
+    })
   })),
   ...per21UpperFloorRooms.map((room) => ({
     roomNumber: room.roomId,
     floor: 2,
-    roomType: 'normal',
-    dimensions: '10 x 10 m'
+    roomType: room.kind === 'front-upper' ? 'front-upper' : 'normal',
+    dimensions: formatDimensions(room.size ?? {
+      length: PER21_LAYOUT_SIZES.classLength,
+      width: PER21_LAYOUT_SIZES.classWidth
+    })
   }))
 ];
 

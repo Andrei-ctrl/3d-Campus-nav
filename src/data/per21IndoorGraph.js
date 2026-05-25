@@ -1,6 +1,8 @@
 import {
   per21ClassroomNodes,
-  PER21_SIDE_ENTRANCE_CORES
+  PER21_SIDE_ENTRANCE_CORES,
+  PER21_BACK_CLASSROOM_Z,
+  per21CorridorStops
 } from './per21Layout.js';
 
 const PER21_CENTER_X = 10;
@@ -11,20 +13,11 @@ const PER21_HALF_WIDTH = 19;
 const FRONT_Z = PER21_CENTER_Z - PER21_HALF_WIDTH;
 const BACK_Z = PER21_CENTER_Z + PER21_HALF_WIDTH;
 const CORE_Z = FRONT_Z + 10;
-const CLASSROOM_Z = BACK_Z - 4;
+const CLASSROOM_Z = PER21_BACK_CLASSROOM_Z;
 const INSIDE_Z = CORE_Z - 2;
 const MAX_FLOOR = 4;
 
-const corridorStops = [
-  { key: 'H_END', x: 7.5 },
-  { key: 'G_ROOMS', x: 28.5 },
-  { key: 'F_ROOMS', x: 44 },
-  { key: 'E_ROOMS', x: 58.5 },
-  { key: 'D_ROOMS', x: 74 },
-  { key: 'C_ROOMS', x: 88.5 },
-  { key: 'B_ROOMS', x: 104 },
-  { key: 'A_ROOMS', x: 124.5 }
-];
+const corridorStops = per21CorridorStops;
 
 const publicNodes = [
   { id: 'PER21_CAFETERIA', x: 87, z: CORE_Z, floor: 0 },
@@ -89,7 +82,7 @@ function createRoomNodes() {
     return node(
       `PER21_${room.roomId}`,
       room.x,
-      CLASSROOM_Z,
+      room.z ?? CLASSROOM_Z,
       room.floor,
       isCorridorGap ? 'Corridor under G230' : `Room ${room.roomId}`,
       isCorridorGap ? 'corridor' : 'room'

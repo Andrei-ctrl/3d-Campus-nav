@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import {
   PER21_SIDE_ENTRANCE_CORES,
+  PER21_BACK_CLASSROOM_Z,
+  PER21_LAYOUT_SIZES,
   per21CubicFirstFloorRooms,
   per21ClassroomFirstFloorRooms,
   per21FirstFloorCorridorGaps,
-  per21UpperFloorRooms,
-  per21CorridorGapX
+  per21UpperFloorRooms
 } from '../data/per21Layout.js';
 
 const PER21_CENTER_X = 10;
@@ -17,7 +18,7 @@ const BACK_Z = 75;
 const CORE_Z = 47;
 const INSIDE_Z = 45;
 const PUBLIC_Z = 70;
-const CLASSROOM_Z = 71;
+const CLASSROOM_Z = PER21_BACK_CLASSROOM_Z;
 const VERTICAL_SHAFT_HEIGHT = 22;
 
 function toWorldX(localX) {
@@ -131,31 +132,42 @@ function createSideVerticalCores() {
   ]));
 }
 
-const secondFloorTimetableRooms = per21UpperFloorRooms.filter((room) => room.roomId === 'F205');
+function defaultRoomSize(kind) {
+  if (kind === 'cube') {
+    return {
+      length: PER21_LAYOUT_SIZES.cubeLength,
+      width: PER21_LAYOUT_SIZES.cubeWidth,
+      height: 6
+    };
+  }
+
+  return {
+    length: PER21_LAYOUT_SIZES.classLength,
+    width: PER21_LAYOUT_SIZES.classWidth,
+    height: 2.4
+  };
+}
 
 function createClassroomVolumes() {
   return [
-    createIndoorBox(
-      { x: per21CorridorGapX.A_B, z: CLASSROOM_Z },
-      { length: 20, width: 10, height: 0.35 },
-      0x90caf9,
-      'PER21_A_B_CUBE_CORRIDOR',
-      'PER21 corridor space between A140 and B140',
-      12.55,
-      0.48
-    ),
     ...per21FirstFloorCorridorGaps.map((gap) => createIndoorBox(
-      { x: gap.x, z: CLASSROOM_Z },
-      { length: 10, width: 10, height: 0.35 },
+      { x: gap.x, z: gap.z ?? CLASSROOM_Z },
+      {
+        length: gap.size?.length ?? PER21_LAYOUT_SIZES.corridorLength,
+        width: gap.size?.width ?? PER21_LAYOUT_SIZES.classWidth,
+        height: 0.35
+      },
       0x90caf9,
       `PER21_${gap.roomId}_VOLUME`,
-      'PER21 corridor space under G230',
+      gap.roomId === 'A_B_CORRIDOR'
+        ? 'PER21 corridor space between A140 and B140'
+        : 'PER21 corridor space under G230',
       12.55,
       0.48
     )),
     ...per21CubicFirstFloorRooms.map((room) => createIndoorBox(
-      { x: room.x, z: CLASSROOM_Z },
-      { length: 15, width: 15, height: 6 },
+      { x: room.x, z: room.z ?? CLASSROOM_Z },
+      room.size ?? defaultRoomSize('cube'),
       0x0288d1,
       `PER21_${room.roomId}_CUBE_VOLUME`,
       `PER21 ${room.roomId} cubic room`,
@@ -163,29 +175,20 @@ function createClassroomVolumes() {
       0.44
     )),
     ...per21ClassroomFirstFloorRooms.map((room) => createIndoorBox(
-      { x: room.x, z: CLASSROOM_Z },
-      { length: 10, width: 10, height: 2.4 },
+      { x: room.x, z: room.z ?? CLASSROOM_Z },
+      room.size ?? defaultRoomSize('classroom'),
       0x4fc3f7,
       `PER21_${room.roomId}_CLASSROOM_VOLUME`,
       `PER21 ${room.roomId} classroom`,
       13.4,
       0.58
     )),
-    ...per21UpperFloorRooms.filter((room) => room.roomId !== 'F205').map((room) => createIndoorBox(
-      { x: room.x, z: CLASSROOM_Z },
-      { length: 10, width: 10, height: 2.4 },
+    ...per21UpperFloorRooms.map((room) => createIndoorBox(
+      { x: room.x, z: room.z ?? CLASSROOM_Z },
+      room.size ?? defaultRoomSize('classroom'),
       0x81d4fa,
       `PER21_${room.roomId}_ROOM_VOLUME`,
       `PER21 ${room.roomId} upper classroom`,
-      18.9,
-      0.54
-    )),
-    ...secondFloorTimetableRooms.map((room) => createIndoorBox(
-      { x: room.x, z: CLASSROOM_Z },
-      { length: 10, width: 10, height: 2.4 },
-      0x81d4fa,
-      `PER21_${room.roomId}_ROOM_VOLUME`,
-      `PER21 ${room.roomId} timetable classroom`,
       18.9,
       0.54
     ))
@@ -204,7 +207,7 @@ export function createPer21IndoorStructure(scene) {
       0.18
     ),
     createIndoorBox(
-      { x: 66, z: CENTER_Z },
+      { x: 66, z: CLASSROOM_Z },
       { length: 132, width: 3, height: 0.4 },
       0xb3e5fc,
       'PER21_MAIN_CORRIDOR_F1',
@@ -331,7 +334,7 @@ export function createPer21IndoorStructure(scene) {
     ...createSideVerticalCores(),
 
     createIndoorBox(
-      { x: 66, z: CENTER_Z },
+      { x: 66, z: CLASSROOM_Z },
       { length: 132, width: 3, height: 0.4 },
       0x64b5f6,
       'PER21_FIRST_FLOOR_CORRIDOR',
@@ -348,7 +351,7 @@ export function createPer21IndoorStructure(scene) {
     ),
     ...createClassroomVolumes(),
     createIndoorBox(
-      { x: 66, z: CENTER_Z },
+      { x: 66, z: CLASSROOM_Z },
       { length: 132, width: 3, height: 0.4 },
       0x1976d2,
       'PER21_SECOND_FLOOR_CORRIDOR',
@@ -364,7 +367,7 @@ export function createPer21IndoorStructure(scene) {
       15.45
     ),
     createIndoorBox(
-      { x: 66, z: CENTER_Z },
+      { x: 66, z: CLASSROOM_Z },
       { length: 132, width: 3, height: 0.4 },
       0x0d47a1,
       'PER21_THIRD_FLOOR_CORRIDOR',
@@ -380,7 +383,7 @@ export function createPer21IndoorStructure(scene) {
       18.45
     ),
     createIndoorBox(
-      { x: 66, z: CENTER_Z },
+      { x: 66, z: CLASSROOM_Z },
       { length: 132, width: 3, height: 0.4 },
       0x283593,
       'PER21_FOURTH_FLOOR_CORRIDOR',
@@ -396,7 +399,7 @@ export function createPer21IndoorStructure(scene) {
       21.45
     ),
     createIndoorBox(
-      { x: 66, z: CENTER_Z },
+      { x: 66, z: CLASSROOM_Z },
       { length: 132, width: 3, height: 0.4 },
       0x1a237e,
       'PER21_FIFTH_FLOOR_CORRIDOR',

@@ -44,31 +44,43 @@ function createNavigationMarker(nodeId, node, buildingId) {
   return marker;
 }
 
+const LABEL_SCALE = { x: 7, y: 2.2 };
+const LABEL_CANVAS = { width: 256, height: 96 };
+const LABEL_FONT = 'bold 26px Arial';
+
+function labelHeightForFloor(floor = 0) {
+  // Sit just above room volumes (cubes ~18 m, upper rooms ~20 m).
+  return 18 + floor * 4.5;
+}
+
 function createRoomLabel(room, roomNode) {
   const canvas = document.createElement('canvas');
-  canvas.width = 384;
-  canvas.height = 128;
+  canvas.width = LABEL_CANVAS.width;
+  canvas.height = LABEL_CANVAS.height;
 
   const context = canvas.getContext('2d');
 
   context.fillStyle = 'rgba(0, 0, 0, 0.75)';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = '#2196f3';
-  context.font = 'bold 38px Arial';
+  context.font = LABEL_FONT;
   context.textAlign = 'center';
-  context.fillText(room.name || roomNode.label, canvas.width / 2, 78);
+  context.fillText(room.name || roomNode.label, canvas.width / 2, 58);
 
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.SpriteMaterial({
     map: texture,
-    transparent: true
+    transparent: true,
+    depthTest: false,
+    depthWrite: false
   });
 
   const sprite = new THREE.Sprite(material);
-  const y = 15 + (roomNode.floor || 0) * 3;
+  const y = labelHeightForFloor(roomNode.floor || 0);
 
   sprite.position.set(roomNode.x, y, roomNode.z);
-  sprite.scale.set(18, 6, 1);
+  sprite.scale.set(LABEL_SCALE.x, LABEL_SCALE.y, 1);
+  sprite.renderOrder = 10;
 
   sprite.userData = {
     type: 'indoor-room-label',
