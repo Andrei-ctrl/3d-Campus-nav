@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FLOOR_HEIGHT, buildingHeight } from '../data/buildings.js';
+import { buildingHeight, floorElevation } from '../data/buildings.js';
 
 let currentIndoorRouteMeshes = [];
 let isIndoorRouteVisible = true;
@@ -37,10 +37,10 @@ function createIndoorRouteSegment(start, end, options = {}) {
 
   const startFloor = start.floor || 0;
   const endFloor = end.floor || 0;
-  const averageFloor = (startFloor + endFloor) / 2;
+  const averageFloorElevation = (floorElevation(startFloor) + floorElevation(endFloor)) / 2;
 
   const routeBaseY = ROUTE_BASE_Y_BY_BUILDING[options.buildingId] ?? 9;
-  const y = routeBaseY + averageFloor * FLOOR_HEIGHT;
+  const y = routeBaseY + averageFloorElevation;
 
   mesh.position.set(
     (start.x + end.x) / 2,

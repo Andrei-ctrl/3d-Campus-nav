@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { convertMapPointToAnchorRelative } from './arRouteAdapter.js';
-import { FLOOR_HEIGHT } from '../data/buildings.js';
+import { floorElevation } from '../data/buildings.js';
 
 // In WebXR AR the camera pose comes from real phone movement (ARCore/WebXR).
 // The route group is anchored once at a known entrance and stays fixed in world space.
@@ -8,7 +8,6 @@ import { FLOOR_HEIGHT } from '../data/buildings.js';
 
 export const DEFAULT_INDOOR_REACHED_THRESHOLD = 1.5;
 const ROUTE_Y_OFFSET = 0.02;
-const FLOOR_STEP = FLOOR_HEIGHT;
 
 const VERTICAL_NODE_PATTERN = /(STAIRS|ELEVATOR|LIFT)/i;
 
@@ -126,7 +125,7 @@ export function routeSegmentsToPointEntries(segments = [], anchorPosition, arOpt
         type: node.type || 'indoor',
         localPoint: new THREE.Vector3(
           relative.x * arScale,
-          floor * FLOOR_STEP * arScale + ROUTE_Y_OFFSET,
+          floorElevation(floor) * arScale + ROUTE_Y_OFFSET,
           relative.z * arScale
         )
       });
@@ -212,7 +211,8 @@ export function createRouteState({
   nextMarker,
   destinationName,
   pathNodeIds,
-  reachedThreshold = DEFAULT_INDOOR_REACHED_THRESHOLD
+  reachedThreshold = DEFAULT_INDOOR_REACHED_THRESHOLD,
+  hasOutdoorSegment = false
 }) {
   return {
     routeGroup,
@@ -227,6 +227,7 @@ export function createRouteState({
     destinationName: destinationName || 'your destination',
     active: false,
     aligned: false,
+    hasOutdoorSegment,
     instructionText: 'Stand at the entrance and tap "Align AR Route".',
     distanceToNextNode: null,
     remainingDistance: null,
@@ -259,6 +260,31 @@ function updateSegmentStyles(routeState) {
     );
     routeState.nextMarker.position.copy(routeState.routePointEntries[nextIndex].localPoint);
     routeState.nextMarker.visible = !routeState.destinationReached;
+  }
+}
+
+function finalizeRouteAlignment(routeGroup, routeState, options = {}) {
+  routeGroup.visible = true;
+  routeGroup.updateMatrixWorld(true);
+
+  computeWorldRoutePoints(routeState);
+  routeState.currentNodeIndex = Math.min(1, routeState.routePointsWorld.length - 1);
+  routeState.destinationReached = false;
+  routeState.active = true;
+  routeState.aligned = true;
+
+  updateSegmentStyles(routeState);
+  emitInstruction(routeState, options.instruction || 'Follow the green route');
+
+  notifyRouteState(routeState);
+}
+
+function logRouteAlignment(location, message, data) {
+  // #region agent log
+  fetch('http://127.0.0.1:7546/ingest/131a3ef0-1571-476a-824c-f9e62e696b4d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ef8ba'},body:JSON.stringify({sessionId:'5ef8ba',location,message,data,timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  if (typeof window !== 'undefined') {
+    window.__arRouteDebug = { ...(window.__arRouteDebug || {}), ...data, message, at: Date.now() };
   }
 }
 
@@ -339,6 +365,10 @@ export function tickARRouteAlign() {
 
   if (arMode === 'camera-debug') {
     anchorRouteCameraDebug(routeState.routeGroup, camera, routeState, scene);
+  } else if (routeState.hasOutdoorSegment) {
+    anchorRouteToSceneAnchor(routeState.routeGroup, routeState, scene, {
+      instruction: 'Follow the green route on the ground'
+    });
   } else {
     anchorRouteToCurrentCamera(
       routeState.routeGroup,
@@ -365,6 +395,42 @@ export function alignARRouteForSession(routeState, camera, scene, options = {}) 
   return routeState;
 }
 
+export function anchorRouteToSceneAnchor(routeGroup, routeState, scene, options = {}) {
+  if (!routeGroup || !routeState) {
+    return routeState;
+  }
+
+  if (routeGroup.parent) {
+    routeGroup.parent.remove(routeGroup);
+  }
+
+  const floorY = routeState.routePointEntries[0]?.localPoint.y ?? ROUTE_Y_OFFSET;
+
+  routeGroup.position.set(0, floorY, 0);
+  routeGroup.rotation.set(0, 0, 0);
+
+  if (scene && !routeGroup.parent) {
+    scene.add(routeGroup);
+  }
+
+  finalizeRouteAlignment(routeGroup, routeState, options);
+
+  const lastLocal = routeState.routePointEntries.at(-1)?.localPoint;
+  const lastWorld = routeState.routePointsWorld.at(-1);
+
+  logRouteAlignment('indoorRouteProgress.js:anchorRouteToSceneAnchor', 'anchor-fixed AR align', {
+    hypothesisId: 'D',
+    alignMode: 'anchor-fixed',
+    hasOutdoorSegment: routeState.hasOutdoorSegment,
+    rotationY: routeGroup.rotation.y,
+    localEnd: lastLocal ? { x: lastLocal.x, y: lastLocal.y, z: lastLocal.z } : null,
+    worldEnd: lastWorld ? { x: lastWorld.x, y: lastWorld.y, z: lastWorld.z } : null,
+    nodeCount: routeState.routePointEntries.length
+  });
+
+  return routeState;
+}
+
 export function anchorRouteToCurrentCamera(routeGroup, camera, routeState, scene, options = {}) {
   if (!routeGroup || !camera || !routeState) {
     return routeState;
@@ -388,19 +454,23 @@ export function anchorRouteToCurrentCamera(routeGroup, camera, routeState, scene
     scene.add(routeGroup);
   }
 
-  routeGroup.visible = true;
-  routeGroup.updateMatrixWorld(true);
+  finalizeRouteAlignment(routeGroup, routeState, options);
 
-  computeWorldRoutePoints(routeState);
-  routeState.currentNodeIndex = Math.min(1, routeState.routePointsWorld.length - 1);
-  routeState.destinationReached = false;
-  routeState.active = true;
-  routeState.aligned = true;
+  const lastLocal = routeState.routePointEntries.at(-1)?.localPoint;
+  const lastWorld = routeState.routePointsWorld.at(-1);
 
-  updateSegmentStyles(routeState);
-  emitInstruction(routeState, options.instruction || 'Follow the green route');
+  logRouteAlignment('indoorRouteProgress.js:anchorRouteToCurrentCamera', 'camera-relative AR align', {
+    hypothesisId: 'D',
+    alignMode: 'camera-relative',
+    hasOutdoorSegment: routeState.hasOutdoorSegment,
+    routeHeading,
+    cameraHeading: heading,
+    rotationY: routeGroup.rotation.y,
+    localEnd: lastLocal ? { x: lastLocal.x, y: lastLocal.y, z: lastLocal.z } : null,
+    worldEnd: lastWorld ? { x: lastWorld.x, y: lastWorld.y, z: lastWorld.z } : null,
+    nodeCount: routeState.routePointEntries.length
+  });
 
-  notifyRouteState(routeState);
   return routeState;
 }
 
@@ -588,7 +658,8 @@ export function prepareIndoorARRoute(scene, routeConfig, callbacks = {}) {
     nextMarker,
     destinationName: routeConfig.destinationName,
     pathNodeIds,
-    reachedThreshold: DEFAULT_INDOOR_REACHED_THRESHOLD * arScale
+    reachedThreshold: DEFAULT_INDOOR_REACHED_THRESHOLD * arScale,
+    hasOutdoorSegment: routeConfig.hasOutdoorSegment ?? false
   });
 
   routeState.onUpdate = callbacks.onUpdate ?? null;

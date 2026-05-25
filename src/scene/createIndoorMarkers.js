@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FLOOR_HEIGHT, buildingHeight } from '../data/buildings.js';
+import { buildingHeight, floorElevation } from '../data/buildings.js';
 
 const MARKER_BASE_Y_BY_BUILDING = {
   PER21: buildingHeight(5) + 0.5,
@@ -16,7 +16,7 @@ function createRoomMarker(room, roomNode, color = 0x2196f3) {
   const material = new THREE.MeshBasicMaterial({ color });
 
   const marker = new THREE.Mesh(geometry, material);
-  const y = markerBaseY(room.buildingId) + (roomNode.floor || 0) * FLOOR_HEIGHT;
+  const y = markerBaseY(room.buildingId) + floorElevation(roomNode.floor || 0);
 
   marker.position.set(roomNode.x, y, roomNode.z);
 
@@ -40,7 +40,7 @@ function createNavigationMarker(nodeId, node, buildingId) {
   });
 
   const marker = new THREE.Mesh(geometry, material);
-  const y = markerBaseY(buildingId) + 0.3 + (node.floor || 0) * FLOOR_HEIGHT;
+  const y = markerBaseY(buildingId) + 0.3 + floorElevation(node.floor || 0);
 
   marker.position.set(node.x, y, node.z);
 
@@ -60,7 +60,7 @@ const LABEL_CANVAS = { width: 256, height: 96 };
 const LABEL_FONT = 'bold 26px Arial';
 
 function labelHeightForFloor(buildingId, floor = 0) {
-  return markerBaseY(buildingId) + 7.5 + floor * FLOOR_HEIGHT;
+  return markerBaseY(buildingId) + 7.5 + floorElevation(floor);
 }
 
 function createRoomLabel(room, roomNode) {

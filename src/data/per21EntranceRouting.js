@@ -1,6 +1,6 @@
 import { per21IndoorGraph } from './per21IndoorGraph.js';
 import { findShortestPath } from '../navigation/dijkstra.js';
-import { FLOOR_HEIGHT } from './buildings.js';
+import { floorDistance } from './buildings.js';
 
 export const PER21_INDOOR_ENTRANCE_IDS = [
   'PER21_MAIN_ENTRANCE',
@@ -29,7 +29,7 @@ function indoorPathDistance(graph, pathNodeIds) {
       return Infinity;
     }
 
-    const floorDelta = ((end.floor || 0) - (start.floor || 0)) * FLOOR_HEIGHT;
+    const floorDelta = floorDistance(start.floor || 0, end.floor || 0);
     total += Math.hypot(end.x - start.x, end.z - start.z, floorDelta);
   }
 

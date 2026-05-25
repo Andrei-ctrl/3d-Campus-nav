@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { FLOOR_HEIGHT, buildingHeight } from '../data/buildings.js';
+import { GROUND_FLOOR_HEIGHT, buildingHeight } from '../data/buildings.js';
 
 const PER22_SHELL_HEIGHT = buildingHeight(2);
-const AUDITORIUM_HEIGHT = FLOOR_HEIGHT;
+const AUDITORIUM_HEIGHT = GROUND_FLOOR_HEIGHT;
 const LIBRARY_HEIGHT = PER22_SHELL_HEIGHT - AUDITORIUM_HEIGHT;
 
 function createIndoorBox(center, size, color, id, name, y) {

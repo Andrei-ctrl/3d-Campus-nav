@@ -190,8 +190,15 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
     const cameraWorldPosition = new THREE.Vector3();
     camera.getWorldPosition(cameraWorldPosition);
 
+    const routeHeading = getRouteHeading(arPoints);
+    const cameraHeading = getCameraHeading(camera);
     group.position.set(cameraWorldPosition.x, 0, cameraWorldPosition.z);
-    group.rotation.set(0, getCameraHeading(camera) - getRouteHeading(arPoints), 0);
+    group.rotation.set(0, cameraHeading - routeHeading, 0);
+
+    // #region agent log
+    fetch('http://127.0.0.1:7546/ingest/131a3ef0-1571-476a-824c-f9e62e696b4d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ef8ba'},body:JSON.stringify({sessionId:'5ef8ba',hypothesisId:'C',location:'arRouteRenderer.js:renderARRoute',message:'outdoor AR align',data:{pathNodeIds:pathNodeIds.slice(0,6),arPoints0:arPoints[0],arPoints1:arPoints[1],routeHeading,cameraHeading,rotationY:group.rotation.y,scale,arMirrorX},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     scene.add(group);
   } else {
     scene.add(group);
