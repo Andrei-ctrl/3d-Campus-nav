@@ -10,10 +10,10 @@ import {
 const FRONT_ROAD_Z = 30;
 const PER21_EAST_X = 82;
 
-// Mensa box (~rotation 90°): x ≈ 150–170, z ≈ -14–49 — path stays outside to the east/north.
+// Mensa box (~rotation 90°): x ≈ 150–170, z ≈ -4–59 — path stays outside to the east/north.
 const MENSA_EAST_PATH_X = 175;
-const MENSA_NORTH_PATH_Z = 50;
-const MENSA_SOUTH_PATH_Z = -20;
+const MENSA_NORTH_PATH_Z = 60;
+const MENSA_SOUTH_PATH_Z = -10;
 
 const mensaEntrance = getEntrancePosition('MENSA_ENTRANCE');
 const per17Entrance = getEntrancePosition('PER17_ENTRANCE');

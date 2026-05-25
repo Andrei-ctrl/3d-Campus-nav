@@ -131,11 +131,11 @@ function getGroupScale(groupName, calibration) {
     case 'buildings':
       return calibration.buildingsScale;
     case 'per21Indoor':
-      return calibration.per21IndoorScale;
+      return calibration.buildingsScale * calibration.per21IndoorScale;
     case 'per22Indoor':
-      return calibration.per22IndoorScale;
+      return calibration.buildingsScale * calibration.per22IndoorScale;
     case 'per17Indoor':
-      return calibration.per17IndoorScale;
+      return calibration.buildingsScale * calibration.per17IndoorScale;
     case 'paths':
       return calibration.pathsScale;
     case 'markers':
@@ -156,7 +156,8 @@ function applyTransformToObject(object, calibration, options = {}) {
 
   const groupName = object.userData.calibrationGroup || 'buildings';
   const groupScale = getGroupScale(groupName, calibration);
-  const sceneScale = calibration.globalScale * groupScale;
+  const globalScale = calibration.globalScale;
+  const layoutScale = globalScale * groupScale;
   const pivot = options.pivot || {
     x: calibration.pivotX,
     y: calibration.pivotY,
@@ -166,19 +167,19 @@ function applyTransformToObject(object, calibration, options = {}) {
   let positionX =
     calibration.offsetX +
     pivot.x +
-    (original.position.x - pivot.x) * sceneScale;
+    (original.position.x - pivot.x) * layoutScale;
   let positionY =
     calibration.offsetY +
     pivot.y +
-    (original.position.y - pivot.y) * sceneScale;
+    (original.position.y - pivot.y) * layoutScale;
   let positionZ =
     calibration.offsetZ +
     pivot.z +
-    (original.position.z - pivot.z) * sceneScale;
+    (original.position.z - pivot.z) * layoutScale;
 
-  let scaleX = original.scale.x * sceneScale;
-  let scaleY = original.scale.y * sceneScale;
-  let scaleZ = original.scale.z * sceneScale;
+  let scaleX = original.scale.x * layoutScale;
+  let scaleY = original.scale.y * layoutScale;
+  let scaleZ = original.scale.z * layoutScale;
 
   if (options.anchor && isARActive) {
     const anchor = options.anchor.position;
@@ -189,15 +190,17 @@ function applyTransformToObject(object, calibration, options = {}) {
 
     positionX =
       calibration.arOffsetX +
-      mirrorX * dx * arScale * groupScale;
-    positionY = calibration.arOffsetY + original.position.y * arScale * groupScale;
+      mirrorX * dx * arScale * layoutScale;
+    positionY =
+      calibration.arOffsetY +
+      original.position.y * arScale * layoutScale;
     positionZ =
       calibration.arOffsetZ -
-      dz * arScale * groupScale;
+      dz * arScale * layoutScale;
 
-    scaleX = original.scale.x * arScale * groupScale;
-    scaleY = original.scale.y * arScale * groupScale;
-    scaleZ = original.scale.z * arScale * groupScale;
+    scaleX = original.scale.x * arScale * layoutScale;
+    scaleY = original.scale.y * arScale * layoutScale;
+    scaleZ = original.scale.z * arScale * layoutScale;
   }
 
   object.position.set(positionX, positionY, positionZ);

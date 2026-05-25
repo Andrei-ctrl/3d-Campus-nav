@@ -25,9 +25,9 @@ const CONTROL_GROUPS = [
     title: 'Building groups',
     controls: [
       { key: 'buildingsScale', label: 'Building shells', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'per21IndoorScale', label: 'PER21 interior', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'per22IndoorScale', label: 'PER22 interior', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'per17IndoorScale', label: 'PER17 interior', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
+      { key: 'per21IndoorScale', label: 'PER21 interior × shells', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
+      { key: 'per22IndoorScale', label: 'PER22 interior × shells', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
+      { key: 'per17IndoorScale', label: 'PER17 interior × shells', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
       { key: 'markersScale', label: 'Markers & labels', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
       { key: 'pathsScale', label: 'Roads & paths', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
       { key: 'groundScale', label: 'Ground plane', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
@@ -102,7 +102,7 @@ export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle }
   const help = document.createElement('p');
   help.className = 'calibration-help';
   help.textContent =
-    'Align the 3D prototype with the real campus. Use group scales for building shells vs interiors. Number fields accept values beyond the slider range.';
+    'Align the 3D prototype with the real campus. Global scale affects everything; building shells and interiors scale together by default (interior sliders are multipliers on top of shells).';
   content.appendChild(help);
 
   const modeLabel = document.createElement('label');
