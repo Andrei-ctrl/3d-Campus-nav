@@ -143,7 +143,7 @@ export function indoorPathToRoutePoints(indoorGraph, pathNodeIds = [], anchorPos
   );
 }
 
-function compressRoutePointsForCameraDebug(routePointEntries = []) {
+function compressRoutePointsForCameraDebug(routePointEntries = [], arScale = 1) {
   const stepForward = 0.35;
 
   return routePointEntries.map((entry, index) => ({
@@ -151,7 +151,7 @@ function compressRoutePointsForCameraDebug(routePointEntries = []) {
     localPoint: new THREE.Vector3(
       0,
       -0.45,
-      -1.3 - index * stepForward
+      (-1.3 - index * stepForward) * arScale
     )
   }));
 }
@@ -540,8 +540,10 @@ export function prepareIndoorARRoute(scene, routeConfig, callbacks = {}) {
     routeConfig.arOptions ?? null
   );
 
+  const arScale = routeConfig.arOptions?.arScale ?? 1;
+
   if (routeConfig.arMode === 'camera-debug') {
-    routePointEntries = compressRoutePointsForCameraDebug(routePointEntries);
+    routePointEntries = compressRoutePointsForCameraDebug(routePointEntries, arScale);
   }
 
   if (routePointEntries.length < 2) {
@@ -549,9 +551,10 @@ export function prepareIndoorARRoute(scene, routeConfig, callbacks = {}) {
   }
 
   const pathNodeIds = segments.flatMap((segment) => segment.pathNodeIds ?? []);
-  const arScale = routeConfig.arOptions?.arScale ?? 1;
 
-  const { group, segmentMeshes, nextMarker } = createARRouteGroup(routePointEntries);
+  const { group, segmentMeshes, nextMarker } = createARRouteGroup(routePointEntries, {
+    radius: Math.max(0.04, 0.12 * Math.sqrt(arScale))
+  });
   group.visible = false;
   scene.add(group);
 

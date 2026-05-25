@@ -8,12 +8,23 @@ import {
   setSceneCalibration
 } from '../scene/sceneCalibration.js';
 
-const CALIBRATION_CONTROLS = [
+const DESKTOP_CALIBRATION_CONTROLS = [
   { key: 'globalScale', label: 'Global scale', min: 0.01, sliderMax: 30, step: 0.01, wide: true },
   { key: 'offsetX', label: 'Offset X (m)', min: -500, sliderMax: 500, step: 0.5 },
   { key: 'offsetY', label: 'Offset Y (m)', min: -100, sliderMax: 100, step: 0.1 },
   { key: 'offsetZ', label: 'Offset Z (m)', min: -500, sliderMax: 500, step: 0.5 }
 ];
+
+const AR_CALIBRATION_CONTROLS = [
+  { key: 'arScale', label: 'AR scale', min: 0.001, sliderMax: 5, step: 0.001, wide: true }
+];
+
+function createSectionTitle(text) {
+  const title = document.createElement('div');
+  title.className = 'calibration-section-title';
+  title.textContent = text;
+  return title;
+}
 
 function syncControlValues(controls, calibration) {
   Object.entries(controls).forEach(([key, control]) => {
@@ -56,7 +67,7 @@ export function createCalibrationPanel({ onApply, onMirrorToggle, onFitView } = 
   const help = document.createElement('p');
   help.className = 'calibration-help';
   help.textContent =
-    'One scale and offset for the whole campus model (default scale 0.05). In AR only the green route line is shown — not the 3D buildings. Use “Debug route in front of camera” in AR mode to verify the line appears immediately.';
+    'Desktop: one scale and offset for the 3D map (default global scale 0.05). AR: separate scale for the route line and any AR models (default AR scale 1 = real metres).';
   content.appendChild(help);
 
   const modeLabel = document.createElement('label');
@@ -163,7 +174,13 @@ export function createCalibrationPanel({ onApply, onMirrorToggle, onFitView } = 
     controls[key] = { range, number };
   };
 
-  CALIBRATION_CONTROLS.forEach((control) => {
+  content.appendChild(createSectionTitle('Desktop map'));
+  DESKTOP_CALIBRATION_CONTROLS.forEach((control) => {
+    addCalibrationControl(control.key, control.label, control);
+  });
+
+  content.appendChild(createSectionTitle('AR'));
+  AR_CALIBRATION_CONTROLS.forEach((control) => {
     addCalibrationControl(control.key, control.label, control);
   });
 
