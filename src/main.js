@@ -778,6 +778,10 @@ window.addEventListener('resize', () => {
 
 // Handle mouse clicks for object selection
 window.addEventListener('click', (event) => {
+  if (controls.consumeClickSuppression?.()) {
+    return;
+  }
+
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
