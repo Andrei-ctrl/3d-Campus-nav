@@ -95,8 +95,7 @@ Examples:
 ```text
 Take me to G230
 Go to Auditorium Joseph Deiss
-Navigate to PER21
-I am at Mensa, go to PER17
+Class name
 ```
 
 The command parser is rule-based. It normalizes the text and tries to match rooms, buildings, course names, and aliases.
