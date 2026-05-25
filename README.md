@@ -331,7 +331,9 @@ The route itself should stay fixed in the world.
 
 To update the timetable:
 
-1. export a new Excel file from the timetable system. I downloaded it from here https://www.unifr.ch/timetable/en/ 
+1. export a new Excel file from the timetable system. I downloaded it from here https://www.unifr.ch/timetable/en/ timetable for Business Informatics domain, semester SS-2026
+<img width="1873" height="860" alt="image" src="https://github.com/user-attachments/assets/765a80e5-ba2d-49f0-b9bb-9bdd2fb2f31f" />
+
 2. put it inside `src/`
 3. update the import in `src/data/timetableLoader.js`
 4. run the build again
@@ -342,6 +344,8 @@ Example:
 ```js
 import timetableAssetUrl from '.../src/timetable_en_24-05-2026_23-52-48.xlsx';
 ```
+
+<img width="1900" height="638" alt="image" src="https://github.com/user-attachments/assets/406b27db-0e3b-4ef3-80ef-7ef594404178" />
 
 ---
 
