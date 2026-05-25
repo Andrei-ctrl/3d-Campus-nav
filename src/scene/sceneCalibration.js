@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'sceneCalibration';
 const LEGACY_STORAGE_KEY = 'arCalibration';
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 4;
 
 // Map coordinates are metres; globalScale shrinks the whole scene for desktop viewing.
 // arScale applies in AR only (route line and any AR-placed models), independent of globalScale.
@@ -113,7 +113,8 @@ export function loadSceneCalibration() {
       ...legacy,
       ...saved,
       globalScale: resetSavedScale ? defaultSceneCalibration.globalScale : saved.globalScale,
-      arScale: resetSavedScale ? defaultSceneCalibration.arScale : saved.arScale
+      arScale: resetSavedScale ? defaultSceneCalibration.arScale : saved.arScale,
+      mode: resetSavedScale ? defaultSceneCalibration.mode : saved.mode
     });
   } catch (error) {
     console.warn('Could not load scene calibration:', error);

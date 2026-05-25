@@ -213,7 +213,7 @@ function renderOutdoorARRouteFromLatest(calibration = getSceneCalibration()) {
     latestOutdoorARRoute.pathNodeIds,
     latestOutdoorARRoute.anchorPosition,
     {
-      scale: 0.05 * (calibration.arScale ?? 1),
+      scale: calibration.arScale ?? 1,
       arMirrorX: calibration.arMirrorX ?? -1
     }
   );

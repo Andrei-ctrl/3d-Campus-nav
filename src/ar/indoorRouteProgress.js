@@ -256,7 +256,7 @@ function updateSegmentStyles(routeState) {
       routeState.currentNodeIndex,
       routeState.routePointsWorld.length - 1
     );
-    routeState.nextMarker.position.copy(routeState.routePointsWorld[nextIndex]);
+    routeState.nextMarker.position.copy(routeState.routePointEntries[nextIndex].localPoint);
     routeState.nextMarker.visible = !routeState.destinationReached;
   }
 }
