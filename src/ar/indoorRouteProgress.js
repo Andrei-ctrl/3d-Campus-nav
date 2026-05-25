@@ -78,13 +78,24 @@ function getRouteHeading(routePointEntries) {
   return Math.atan2(dx, dz);
 }
 
-export function indoorPathToRoutePoints(indoorGraph, pathNodeIds = [], anchorPosition, arOptions = null) {
-  return pathNodeIds
-    .map((nodeId) => {
-      const node = indoorGraph.nodes[nodeId];
+export function routeSegmentsToPointEntries(segments = [], anchorPosition, arOptions = null) {
+  const arScale = arOptions?.arScale ?? 1;
+  const entries = [];
+
+  segments.forEach(({ graph, pathNodeIds }, segmentIndex) => {
+    if (!graph || !pathNodeIds?.length) {
+      return;
+    }
+
+    const nodeIds = segmentIndex > 0 && entries.length > 0
+      ? pathNodeIds.slice(1)
+      : pathNodeIds;
+
+    nodeIds.forEach((nodeId) => {
+      const node = graph.nodes[nodeId];
 
       if (!node || !anchorPosition) {
-        return null;
+        return;
       }
 
       const relative = convertMapPointToAnchorRelative(
@@ -94,18 +105,28 @@ export function indoorPathToRoutePoints(indoorGraph, pathNodeIds = [], anchorPos
       );
       const floor = node.floor || 0;
 
-      return {
+      entries.push({
         nodeId,
         label: node.label || nodeId,
         type: node.type || 'indoor',
         localPoint: new THREE.Vector3(
-          relative.x,
-          floor * FLOOR_STEP + ROUTE_Y_OFFSET,
-          relative.z
+          relative.x * arScale,
+          floor * FLOOR_STEP * arScale + ROUTE_Y_OFFSET,
+          relative.z * arScale
         )
-      };
-    })
-    .filter(Boolean);
+      });
+    });
+  });
+
+  return entries;
+}
+
+export function indoorPathToRoutePoints(indoorGraph, pathNodeIds = [], anchorPosition, arOptions = null) {
+  return routeSegmentsToPointEntries(
+    [{ graph: indoorGraph, pathNodeIds }],
+    anchorPosition,
+    arOptions
+  );
 }
 
 export function createARRouteGroup(routePointEntries = [], options = {}) {
@@ -156,7 +177,8 @@ export function createRouteState({
   segmentMeshes,
   nextMarker,
   destinationName,
-  pathNodeIds
+  pathNodeIds,
+  reachedThreshold = DEFAULT_INDOOR_REACHED_THRESHOLD
 }) {
   return {
     routeGroup,
@@ -166,7 +188,7 @@ export function createRouteState({
     pathNodeIds,
     routePointsWorld: [],
     currentNodeIndex: 1,
-    reachedThreshold: DEFAULT_INDOOR_REACHED_THRESHOLD,
+    reachedThreshold,
     destinationReached: false,
     destinationName: destinationName || 'your destination',
     active: false,
@@ -393,13 +415,18 @@ export function updateRouteProgress(camera, routeState) {
 }
 
 export function prepareIndoorARRoute(scene, routeConfig, callbacks = {}) {
-  if (!routeConfig?.graph || !routeConfig.pathNodeIds || routeConfig.pathNodeIds.length < 2) {
+  const segments = routeConfig.segments ?? (
+    routeConfig.graph && routeConfig.pathNodeIds
+      ? [{ graph: routeConfig.graph, pathNodeIds: routeConfig.pathNodeIds }]
+      : []
+  );
+
+  if (!routeConfig?.anchorPosition || segments.length === 0) {
     return null;
   }
 
-  const routePointEntries = indoorPathToRoutePoints(
-    routeConfig.graph,
-    routeConfig.pathNodeIds,
+  const routePointEntries = routeSegmentsToPointEntries(
+    segments,
     routeConfig.anchorPosition,
     routeConfig.arOptions ?? null
   );
@@ -407,6 +434,9 @@ export function prepareIndoorARRoute(scene, routeConfig, callbacks = {}) {
   if (routePointEntries.length < 2) {
     return null;
   }
+
+  const pathNodeIds = segments.flatMap((segment) => segment.pathNodeIds ?? []);
+  const arScale = routeConfig.arOptions?.arScale ?? 1;
 
   const { group, segmentMeshes, nextMarker } = createARRouteGroup(routePointEntries);
   group.visible = false;
@@ -418,11 +448,22 @@ export function prepareIndoorARRoute(scene, routeConfig, callbacks = {}) {
     segmentMeshes,
     nextMarker,
     destinationName: routeConfig.destinationName,
-    pathNodeIds: routeConfig.pathNodeIds
+    pathNodeIds,
+    reachedThreshold: DEFAULT_INDOOR_REACHED_THRESHOLD * arScale
   });
 
   routeState.onUpdate = callbacks.onUpdate ?? null;
   routeState.onInstruction = callbacks.onInstruction ?? null;
+
+  if (routeConfig.autoAlign === true && callbacks.camera) {
+    anchorRouteToCurrentCamera(
+      group,
+      callbacks.camera,
+      routeState,
+      scene,
+      { instruction: 'Follow the green route' }
+    );
+  }
 
   return routeState;
 }

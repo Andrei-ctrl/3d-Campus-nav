@@ -29,8 +29,6 @@ import {
 import { planCrossBuildingRoute } from './navigation/campusRoute.js';
 import {
   applySceneCalibration,
-  enterARCalibrationView,
-  exitARCalibrationView,
   getSceneCalibration,
   getSceneMirrorLabel,
   isCalibrationNonDefault,
@@ -176,20 +174,23 @@ function refreshIndoorARRouteForMirror() {
   }
 
   const wasAligned = indoorARRouteState?.aligned;
-  const callbacks = {
-    onUpdate: (state) => arRouteProgressPanel?.refreshUI?.(state),
-    onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
-  };
 
   clearIndoorARRouteState();
 
   const calibration = getSceneCalibration();
   indoorARRouteState = prepareIndoorARRoute(scene, {
     ...latestIndoorARRoute,
-    arOptions: { arMirrorX: calibration.arMirrorX ?? -1 }
-  }, callbacks);
+    arOptions: {
+      arMirrorX: calibration.arMirrorX ?? -1,
+      arScale: calibration.arScale
+    }
+  }, {
+    camera,
+    onUpdate: (state) => arRouteProgressPanel?.refreshUI?.(state),
+    onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
+  });
 
-  if (wasAligned && isARSessionRunning && renderer.xr.isPresenting) {
+  if (wasAligned && indoorARRouteState && isARSessionRunning && renderer.xr.isPresenting) {
     anchorRouteToCurrentCamera(
       indoorARRouteState.routeGroup,
       camera,
@@ -226,50 +227,87 @@ function createSceneMirrorButton(className = 'scene-mirror-button') {
   return button;
 }
 
+function isDestinationIndoorSegment(segment, toDestination) {
+  const destinationNodeId = toDestination?.room?.indoorNodeId;
+
+  if (!destinationNodeId || !segment?.path?.length) {
+    return false;
+  }
+
+  return segment.path[segment.path.length - 1] === destinationNodeId;
+}
+
+function buildRouteSegments(routePlan, toDestination = null) {
+  const segments = [];
+  const indoorSegs = routePlan.indoorSegments ?? [];
+  const outdoor = routePlan.outdoorPath ?? [];
+  const hasOutdoor = outdoor.length >= 2;
+
+  if (hasOutdoor) {
+    const sourceIndoor = indoorSegs.find(
+      (segment) => segment.path?.length >= 2 && !isDestinationIndoorSegment(segment, toDestination)
+    ) ?? null;
+    const destIndoor = indoorSegs.find(
+      (segment) => segment.path?.length >= 2 && isDestinationIndoorSegment(segment, toDestination)
+    ) ?? null;
+
+    if (sourceIndoor) {
+      segments.push({ graph: sourceIndoor.graph, pathNodeIds: sourceIndoor.path });
+    }
+
+    segments.push({ graph, pathNodeIds: outdoor });
+
+    if (destIndoor) {
+      segments.push({ graph: destIndoor.graph, pathNodeIds: destIndoor.path });
+    }
+  } else {
+    indoorSegs.forEach((seg) => {
+      if (seg.path?.length >= 2) {
+        segments.push({ graph: seg.graph, pathNodeIds: seg.path });
+      }
+    });
+  }
+
+  if (!segments.length && routePlan.indoorPath?.length >= 2) {
+    const buildingId = routePlan.indoorPathBuildingId ?? toDestination?.room?.buildingId;
+    const indoorGraph = buildingId ? indoorGraphs[buildingId] : null;
+
+    if (indoorGraph) {
+      segments.push({ graph: indoorGraph, pathNodeIds: routePlan.indoorPath });
+    }
+  }
+
+  return segments;
+}
+
 function buildIndoorARRoute(routePlan, toDestination, fromEntranceId = null) {
   if (!toDestination || toDestination.type !== 'room') {
     return null;
   }
 
-  const segments = routePlan.indoorSegments ?? [];
-  let pathNodeIds = null;
-  let graph = null;
-  let buildingId = toDestination.room.buildingId;
+  const segments = buildRouteSegments(routePlan, toDestination);
 
-  const destinationSegment = segments.find(
-    (segment) => segment.path?.[segment.path.length - 1] === toDestination.room.indoorNodeId
-  );
-
-  if (destinationSegment?.path?.length >= 2) {
-    pathNodeIds = destinationSegment.path;
-    graph = destinationSegment.graph;
-    buildingId = destinationSegment.buildingId;
-  } else if ((routePlan.indoorPath?.length ?? 0) >= 2) {
-    pathNodeIds = routePlan.indoorPath;
-    graph = indoorGraphs[buildingId];
-  }
-
-  if (!graph || !pathNodeIds || pathNodeIds.length < 2) {
+  if (!segments.length) {
     return null;
   }
 
-  const entranceNodeId = pathNodeIds[0];
-  const entranceNode = graph.nodes[entranceNodeId];
-  const anchorPosition = entranceNode
-    ? { x: entranceNode.x, z: entranceNode.z }
-    : getEntrancePosition(fromEntranceId ?? latestAnchor?.entranceId ?? entranceNodeId);
+  const firstSegment = segments[0];
+  const firstNodeId = firstSegment.pathNodeIds[0];
+  const firstNode = firstSegment.graph.nodes[firstNodeId];
+  const anchorPosition = firstNode
+    ? { x: firstNode.x, z: firstNode.z }
+    : getEntrancePosition(fromEntranceId ?? latestAnchor?.entranceId ?? firstNodeId);
 
   if (!anchorPosition) {
     return null;
   }
 
   return {
-    graph,
-    pathNodeIds,
-    buildingId,
+    segments,
+    buildingId: toDestination.room.buildingId,
     destinationName: toDestination.room.name,
     anchorPosition,
-    entranceNodeId
+    entranceNodeId: firstNodeId
   };
 }
 
@@ -674,7 +712,15 @@ function showRoute(fromDestinationId, toDestinationId) {
     );
 
     storeLatestRoutePlan(
-      { outdoorPath: [], indoorPath },
+      {
+        outdoorPath: [],
+        indoorPath,
+        indoorSegments: [{
+          buildingId: toDestination.room.buildingId,
+          graph: indoorGraph,
+          path: indoorPath
+        }]
+      },
       toDestination,
       fromDestination.room?.nearestEntranceId
     );
@@ -1016,11 +1062,10 @@ async function createARButton() {
 
   button.addEventListener('click', async () => {
   try {
-    const hasOutdoorRoute = latestAnchor && latestOutdoorPath.length >= 2;
     const hasIndoorRoute = !!latestIndoorARRoute;
 
-    if (!hasOutdoorRoute && !hasIndoorRoute) {
-      alert('Please select a current location and click Show Route before starting AR.');
+    if (!hasIndoorRoute) {
+      alert('Please select a destination room and click Show Route before starting AR.');
       button.textContent = 'Start AR';
       return;
     }
@@ -1029,34 +1074,51 @@ async function createARButton() {
 
     clearIndoorARRouteState();
     clearARRoute(scene);
+    outdoorTrackingPanel?.stopTracking?.();
 
     const session = await startARSession(renderer);
 
     isARSessionRunning = true;
 
     enterARViewMode();
-    enterARCalibrationView(latestAnchor);
 
     if (hasIndoorRoute) {
       const calibration = getSceneCalibration();
 
       indoorARRouteState = prepareIndoorARRoute(scene, {
         ...latestIndoorARRoute,
-        arOptions: { arMirrorX: calibration.arMirrorX ?? -1 }
+        arOptions: {
+          arMirrorX: calibration.arMirrorX ?? -1,
+          arScale: calibration.arScale
+        }
       }, {
+        camera,
         onUpdate: (state) => arRouteProgressPanel?.refreshUI?.(state),
         onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
       });
+
+      if (!indoorARRouteState) {
+        alert('Could not prepare the AR route. Check that a valid route is shown on the map.');
+        isARSessionRunning = false;
+        await session.end();
+        exitARViewMode();
+        button.textContent = 'Start AR';
+        return;
+      }
+
       arRouteProgressPanel?.setPrepared?.(true);
       arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
     }
-    // Outdoor legs use the GPS tracking panel; skip the legacy floating route discs in AR.
 
     session.addEventListener('end', () => {
       isARSessionRunning = false;
       clearIndoorARRouteState();
-      exitARCalibrationView();
       exitARViewMode();
+
+      if (latestOutdoorPath.length >= 2) {
+        outdoorTrackingPanel?.startTracking?.();
+      }
+
       button.textContent = 'Start AR';
       arRouteProgressPanel?.reset?.();
     });
@@ -1174,19 +1236,21 @@ function enterARViewMode() {
 
   arHiddenMeshes.length = 0;
 
-  indoorMarkerMeshes.forEach((mesh) => {
-    if (mesh.visible) {
-      arHiddenMeshes.push(mesh);
-      mesh.visible = false;
-    }
-  });
-
-  [mainRoad, mensaPer17Road, ...pedestrianPathMeshes].forEach((mesh) => {
+  const hideIfVisible = (mesh) => {
     if (mesh?.visible) {
       arHiddenMeshes.push(mesh);
       mesh.visible = false;
     }
-  });
+  };
+
+  indoorMarkerMeshes.forEach(hideIfVisible);
+  Object.values(buildingMeshes).forEach(hideIfVisible);
+  Object.values(entranceMeshes).forEach(hideIfVisible);
+  per21IndoorStructureMeshes.forEach(hideIfVisible);
+  per22IndoorStructureMeshes.forEach(hideIfVisible);
+  per17IndoorStructureMeshes.forEach(hideIfVisible);
+
+  [mainRoad, mensaPer17Road, ...pedestrianPathMeshes].forEach(hideIfVisible);
 
   setIndoorRouteVisible(false);
   setRouteVisible(false);
