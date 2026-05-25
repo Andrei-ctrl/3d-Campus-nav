@@ -8,9 +8,10 @@ The basic idea is simple: the user chooses where they are and where they want to
 https://andrei-ctrl.github.io/3d-Campus-nav/
 
 **YouTube videos:**  
-- Video 1: PASTE_YOUTUBE_LINK_1_HERE  
-- Video 2: PASTE_YOUTUBE_LINK_2_HERE  
-- Video 3: PASTE_YOUTUBE_LINK_3_HERE  
+- Video 1: [PASTE_YOUTUBE_LINK_1_HERE  ](https://youtube.com/shorts/clqkn08DUW0?feature=share)
+- Video 2: [PASTE_YOUTUBE_LINK_2_HERE  ](https://youtube.com/shorts/59jlYgO7K3I?feature=share)
+- Video 3: [PASTE_YOUTUBE_LINK_3_HERE](https://youtu.be/KfiU_uASB7Q)
+- Video 4: [PASTE_YOUTUBE_LINK_4_HERE ](https://youtu.be/hFQCzytQ7Wc) 
 
 ---
 
