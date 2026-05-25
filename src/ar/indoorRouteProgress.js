@@ -23,11 +23,18 @@ function createCylinderBetweenPoints(start, end, radius, color) {
     return null;
   }
 
-  const geometry = new THREE.CylinderGeometry(radius, radius, length, 8);
-  const material = new THREE.MeshBasicMaterial({ color });
+  const geometry = new THREE.CylinderGeometry(radius, radius, length, 10);
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+    opacity: 0.95
+  });
   const cylinder = new THREE.Mesh(geometry, material);
 
   cylinder.position.copy(startVector).add(endVector).multiplyScalar(0.5);
+  cylinder.renderOrder = 999;
 
   const quaternion = new THREE.Quaternion();
   quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
@@ -38,9 +45,16 @@ function createCylinderBetweenPoints(start, end, radius, color) {
 
 function createPointMarker(point, radius, color) {
   const geometry = new THREE.SphereGeometry(radius, 12, 12);
-  const material = new THREE.MeshBasicMaterial({ color });
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+    opacity: 0.95
+  });
   const sphere = new THREE.Mesh(geometry, material);
   sphere.position.copy(point);
+  sphere.renderOrder = 1000;
   return sphere;
 }
 
@@ -129,6 +143,19 @@ export function indoorPathToRoutePoints(indoorGraph, pathNodeIds = [], anchorPos
   );
 }
 
+function compressRoutePointsForCameraDebug(routePointEntries = [], arScale = 1) {
+  const stepForward = 0.35;
+
+  return routePointEntries.map((entry, index) => ({
+    ...entry,
+    localPoint: new THREE.Vector3(
+      0,
+      -0.45,
+      (-1.3 - index * stepForward) * arScale
+    )
+  }));
+}
+
 export function createARRouteGroup(routePointEntries = [], options = {}) {
   const group = new THREE.Group();
   group.name = 'INDOOR_AR_ROUTE_GROUP';
@@ -137,7 +164,7 @@ export function createARRouteGroup(routePointEntries = [], options = {}) {
     layer: 'routes'
   };
 
-  const radius = options.radius ?? 0.08;
+  const radius = options.radius ?? 0.12;
   const segmentMeshes = [];
 
   for (let i = 0; i < routePointEntries.length - 1; i += 1) {
@@ -155,8 +182,14 @@ export function createARRouteGroup(routePointEntries = [], options = {}) {
     segmentMeshes.push(segment);
   }
 
+  if (routePointEntries.length > 0) {
+    const startMarker = createPointMarker(routePointEntries[0].localPoint, 0.18, 0xffff00);
+    startMarker.name = 'INDOOR_AR_START_NODE';
+    group.add(startMarker);
+  }
+
   if (!nextNodeMarker) {
-    nextNodeMarker = createPointMarker(new THREE.Vector3(), 0.12, 0x00ff00);
+    nextNodeMarker = createPointMarker(new THREE.Vector3(), 0.16, 0x00ff00);
     nextNodeMarker.name = 'INDOOR_AR_NEXT_NODE';
   } else if (nextNodeMarker.parent) {
     nextNodeMarker.parent.remove(nextNodeMarker);
@@ -237,9 +270,85 @@ function emitInstruction(routeState, text) {
   routeState.onInstruction?.(text, routeState);
 }
 
+export function anchorRouteCameraDebug(routeGroup, camera, routeState, scene) {
+  if (!routeGroup || !camera || !routeState) {
+    return routeState;
+  }
+
+  if (routeGroup.parent) {
+    routeGroup.parent.remove(routeGroup);
+  }
+
+  camera.add(routeGroup);
+  routeGroup.position.set(0, 0, 0);
+  routeGroup.rotation.set(0, 0, 0);
+
+  if (scene && !scene.children.includes(camera)) {
+    scene.add(camera);
+  }
+
+  routeGroup.visible = true;
+  routeGroup.updateMatrixWorld(true);
+
+  computeWorldRoutePoints(routeState);
+  routeState.currentNodeIndex = Math.min(1, routeState.routePointsWorld.length - 1);
+  routeState.destinationReached = false;
+  routeState.active = true;
+  routeState.aligned = true;
+
+  updateSegmentStyles(routeState);
+  emitInstruction(routeState, 'Debug route in front of camera — follow the green line');
+
+  notifyRouteState(routeState);
+  return routeState;
+}
+
+export function alignARRouteForSession(routeState, camera, scene, options = {}) {
+  if (!routeState || !camera) {
+    return routeState;
+  }
+
+  const arMode = options.arMode ?? 'anchor-relative';
+
+  if (arMode === 'camera-debug') {
+    return anchorRouteCameraDebug(routeState.routeGroup, camera, routeState, scene);
+  }
+
+  let frames = 0;
+
+  const alignWhenReady = () => {
+    if (!routeState.routeGroup) {
+      return;
+    }
+
+    frames += 1;
+
+    if (frames < 4) {
+      requestAnimationFrame(alignWhenReady);
+      return;
+    }
+
+    anchorRouteToCurrentCamera(
+      routeState.routeGroup,
+      camera,
+      routeState,
+      scene,
+      { instruction: 'Follow the green route on the ground' }
+    );
+    routeState.onUpdate?.(routeState);
+  };
+
+  requestAnimationFrame(alignWhenReady);
+  return routeState;
+}
+
 export function anchorRouteToCurrentCamera(routeGroup, camera, routeState, scene, options = {}) {
   if (!routeGroup || !camera || !routeState) {
     return routeState;
+  }
+
+  if (routeGroup.parent === camera) {
+    routeGroup.parent.remove(routeGroup);
   }
 
   const cameraWorldPosition = new THREE.Vector3();
@@ -425,20 +534,27 @@ export function prepareIndoorARRoute(scene, routeConfig, callbacks = {}) {
     return null;
   }
 
-  const routePointEntries = routeSegmentsToPointEntries(
+  let routePointEntries = routeSegmentsToPointEntries(
     segments,
     routeConfig.anchorPosition,
     routeConfig.arOptions ?? null
   );
+
+  const arScale = routeConfig.arOptions?.arScale ?? 1;
+
+  if (routeConfig.arMode === 'camera-debug') {
+    routePointEntries = compressRoutePointsForCameraDebug(routePointEntries, arScale);
+  }
 
   if (routePointEntries.length < 2) {
     return null;
   }
 
   const pathNodeIds = segments.flatMap((segment) => segment.pathNodeIds ?? []);
-  const arScale = routeConfig.arOptions?.arScale ?? 1;
 
-  const { group, segmentMeshes, nextMarker } = createARRouteGroup(routePointEntries);
+  const { group, segmentMeshes, nextMarker } = createARRouteGroup(routePointEntries, {
+    radius: Math.max(0.04, 0.12 * Math.sqrt(arScale))
+  });
   group.visible = false;
   scene.add(group);
 
@@ -454,16 +570,6 @@ export function prepareIndoorARRoute(scene, routeConfig, callbacks = {}) {
 
   routeState.onUpdate = callbacks.onUpdate ?? null;
   routeState.onInstruction = callbacks.onInstruction ?? null;
-
-  if (routeConfig.autoAlign === true && callbacks.camera) {
-    anchorRouteToCurrentCamera(
-      group,
-      callbacks.camera,
-      routeState,
-      scene,
-      { instruction: 'Follow the green route' }
-    );
-  }
 
   return routeState;
 }

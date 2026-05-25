@@ -2,13 +2,14 @@ const STORAGE_KEY = 'sceneCalibration';
 const LEGACY_STORAGE_KEY = 'arCalibration';
 
 // Map coordinates are metres; globalScale shrinks the whole scene for desktop viewing.
-const AR_SCALE = 1;
+// arScale applies in AR only (route line and any AR-placed models), independent of globalScale.
 
 export const defaultSceneCalibration = {
   globalScale: 0.05,
   offsetX: 0,
   offsetY: 0,
   offsetZ: 0,
+  arScale: 1,
   arMirrorX: -1,
   mode: 'anchor-relative',
   livePreview: true
@@ -18,7 +19,8 @@ const CALIBRATION_LIMITS = {
   globalScale: { min: 0.01, max: 30 },
   offsetX: { min: -500, max: 500 },
   offsetY: { min: -100, max: 100 },
-  offsetZ: { min: -500, max: 500 }
+  offsetZ: { min: -500, max: 500 },
+  arScale: { min: 0.001, max: 5 }
 };
 
 function clampCalibrationValue(key, value, fallback) {
@@ -51,6 +53,11 @@ export function sanitizeSceneCalibration(raw = {}) {
   merged.offsetX = clampCalibrationValue('offsetX', merged.offsetX, 0);
   merged.offsetY = clampCalibrationValue('offsetY', merged.offsetY, 0);
   merged.offsetZ = clampCalibrationValue('offsetZ', merged.offsetZ, 0);
+  merged.arScale = clampCalibrationValue(
+    'arScale',
+    merged.arScale,
+    defaultSceneCalibration.arScale
+  );
   merged.arMirrorX = merged.arMirrorX === 1 ? 1 : -1;
 
   if (merged.mode !== 'camera-debug' && merged.mode !== 'anchor-relative') {
@@ -84,10 +91,11 @@ function migrateLegacyCalibration(legacy = {}) {
   }
 
   return {
-    globalScale: legacy.scale ?? undefined,
-    offsetX: legacy.x ?? undefined,
-    offsetY: legacy.y ?? undefined,
-    offsetZ: legacy.z ?? undefined,
+    globalScale: legacy.globalScale ?? undefined,
+    arScale: legacy.scale ?? legacy.arScale ?? undefined,
+    offsetX: legacy.x ?? legacy.offsetX ?? undefined,
+    offsetY: legacy.y ?? legacy.offsetY ?? undefined,
+    offsetZ: legacy.z ?? legacy.offsetZ ?? undefined,
     mode: legacy.mode ?? undefined
   };
 }
@@ -110,13 +118,7 @@ export function loadSceneCalibration() {
 }
 
 export function getSceneCalibration() {
-  return {
-    ...sceneCalibration,
-    arScale: AR_SCALE,
-    arOffsetX: 0,
-    arOffsetY: 0,
-    arOffsetZ: 0
-  };
+  return { ...sceneCalibration };
 }
 
 export function setSceneCalibration(nextCalibration) {
@@ -207,7 +209,7 @@ function applyTransformToObject(object, calibration, options = {}) {
 
   if (options.anchor && isARActive) {
     const anchor = options.anchor.position;
-    const arScale = AR_SCALE;
+    const arScale = calibration.arScale ?? defaultSceneCalibration.arScale;
     const mirrorX = calibration.arMirrorX ?? -1;
     const dx = original.position.x - anchor.x;
     const dz = original.position.z - anchor.z;
