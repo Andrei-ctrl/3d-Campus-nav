@@ -12,8 +12,6 @@ https://andrei-ctrl.github.io/3d-Campus-nav/
 - Video 2: PASTE_YOUTUBE_LINK_2_HERE  
 - Video 3: PASTE_YOUTUBE_LINK_3_HERE  
 
-This is an academic / research prototype, not a production-ready navigation system.
-
 ---
 
 ## What the project does
@@ -52,14 +50,9 @@ The phone gives latitude and longitude. The app converts this into local campus 
 
 So outside the logic is:
 
-```text
-GPS position
-→ convert to campus X/Z coordinates
-→ compare with next outdoor route node
-→ update progress
-```
 
-The blue marker on the map shows the estimated GPS position.
+GPS position that converts to campus X/Z coordinates, compares with next outdoor route node and updates progress.
+
 
 ### Inside
 
@@ -69,12 +62,9 @@ The user stands at a known entrance, points the phone in the corridor direction,
 
 So inside the logic is:
 
-```text
-WebXR camera position
-→ compare with next indoor route node
-→ update instruction
-→ advance along the route
-```
+
+WebXR camera position that compares with next indoor route node, updates instruction, advances along the route.
+
 
 The camera is not moved manually. The phone movement moves it through WebXR.
 
@@ -94,11 +84,6 @@ The route planner can combine:
 - entrance nodes
 - classroom nodes
 
-The route colors are:
-
-- **blue** for outdoor route segments
-- **green** for indoor route segments
-
 ---
 
 ## Voice and text commands
@@ -116,7 +101,7 @@ I am at Mensa, go to PER17
 
 The command parser is rule-based. It normalizes the text and tries to match rooms, buildings, course names, and aliases.
 
-Even though there is an `llm` folder in the project, the current command parsing is not really using a large language model.
+Even though there is an `llm` folder in the project, the current command parsing is not using a large language model because the project turned to be more time consuming than I expected. However in the future I would suggest adding LLM agent to parse newly uploaded files with timetables, map them with existing nodes and graphs, and for better voice recognition commands. 
 
 ---
 
@@ -152,8 +137,6 @@ For indoor AR, the user must:
 5. tap **Align AR Route**
 6. follow the green route
 
-This is still a prototype. It does not scan the real building and it does not use QR codes or persistent anchors yet.
-
 ---
 
 ## Outdoor GPS progress
@@ -166,7 +149,7 @@ The app watches the GPS position with:
 navigator.geolocation.watchPosition(...)
 ```
 
-Then it displays:
+Then it displays (only in debug mode):
 
 - distance to the next route point
 - remaining distance
@@ -194,6 +177,7 @@ Possible instructions are simple:
 - take stairs or elevator
 - you have arrived
 
+Align position is available also in debug mode from the menu on top. 
 ---
 
 ## What is implemented
@@ -242,22 +226,14 @@ Possible instructions are simple:
 
 This project is still a prototype, so there are important limitations.
 
-The 3D campus model is approximate. It is not a scanned BIM model and it is not perfectly aligned with the real building.
+The 3D campus model is approximate. It is not a scanned model with lidar and it is not perfectly aligned with the real building.
 
 GPS outside is also approximate. It can be wrong by several meters, especially near buildings or under roofs.
 
 Indoor AR needs manual alignment. The user has to stand at the entrance and point the phone in the correct direction. If the alignment is bad, the route will also be shifted.
 
-The app does not yet use:
 
-- QR codes
-- visual positioning system
-- persistent AR anchors
-- real scanned floor plans
-- automatic floor detection
-- live timetable synchronization
-
-Also, iPhone browser AR support is limited. The best target is Android Chrome with ARCore.
+Also, iPhone browser AR support is limited. The best target is Android Chrome with ARCore which I was using for demostration. 
 
 ---
 
@@ -356,7 +332,7 @@ The route itself should stay fixed in the world.
 
 To update the timetable:
 
-1. export a new Excel file from the timetable system
+1. export a new Excel file from the timetable system. I downloaded it from here https://www.unifr.ch/timetable/en/ 
 2. put it inside `src/`
 3. update the import in `src/data/timetableLoader.js`
 4. run the build again
@@ -365,7 +341,7 @@ To update the timetable:
 Example:
 
 ```js
-import timetableAssetUrl from '../your-new-file.xlsx?url';
+import timetableAssetUrl from '.../src/timetable_en_24-05-2026_23-52-48.xlsx';
 ```
 
 ---
@@ -386,16 +362,13 @@ import timetableAssetUrl from '../your-new-file.xlsx?url';
 The most important improvements would be:
 
 1. better measured indoor layout
-2. more rooms for PER17 and PER22
-3. QR code or marker-based AR alignment
-4. real entrance calibration
-5. better GPS origin and map rotation correction
-6. live timetable update
-7. cleaner mobile UI
-8. production demo mode without debug panels
+2. QR code or marker-based AR alignment
+3. better GPS origin and map rotation correction
+4. live timetable update
+5. LLM agent
 
 ---
 
 ## License / context
 
-This project was made as an academic prototype for spatial computing and AR/VR campus navigation at the Pérolles campus.
+This project was made as an academic prototype for Foundation of Spatial Computing and Applications in AR/VR at the University of Fribourg.
