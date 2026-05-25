@@ -6,6 +6,7 @@ let menuShell = null;
 let menuDropdown = null;
 const primaryItems = new Map();
 const debugElements = new Set();
+const menuActions = new Map();
 
 function getElement(idOrElement) {
   if (typeof idOrElement === 'string') {
@@ -134,6 +135,30 @@ export function registerDynamicDebugWidget(element) {
   }
 }
 
+export function registerMenuAction(id, { label, getLabel, onClick } = {}) {
+  if (!id || menuActions.has(id)) {
+    return;
+  }
+
+  menuActions.set(id, { label, getLabel, onClick, button: null });
+}
+
+function syncMenuActionLabels() {
+  menuActions.forEach((action) => {
+    if (!action.button) return;
+
+    action.button.textContent = action.getLabel?.() ?? action.label;
+  });
+}
+
+export function updateMenuAction(id) {
+  const action = menuActions.get(id);
+
+  if (action?.button) {
+    action.button.textContent = action.getLabel?.() ?? action.label;
+  }
+}
+
 export function isDebugModeEnabled() {
   return debugMode;
 }
@@ -190,6 +215,23 @@ export function initAppMenu({ primary = [], debugIds = [] } = {}) {
   });
 
   menuDropdown.appendChild(debugButton);
+
+  menuActions.forEach((action, id) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'app-menu-item';
+    button.textContent = action.getLabel?.() ?? action.label;
+    button.addEventListener('click', () => {
+      action.onClick?.();
+      syncMenuActionLabels();
+      closeMenu();
+    });
+
+    action.button = button;
+    menuDropdown.appendChild(button);
+  });
+
+  syncMenuActionLabels();
 
   toggle.addEventListener('click', (event) => {
     event.stopPropagation();

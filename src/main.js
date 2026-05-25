@@ -6,7 +6,8 @@ import {
   clearIndoorARRoute,
   prepareIndoorARRoute,
   updateRouteProgress,
-  alignARRouteForSession
+  alignARRouteForSession,
+  tickARRouteAlign
 } from './ar/indoorRouteProgress.js';
 import { convertRouteToAnchorRelative } from './ar/arRouteAdapter.js';
 import { anchors, getAnchorById, getAnchorForEntranceId } from './data/anchors.js';
@@ -29,6 +30,8 @@ import {
 import { planCrossBuildingRoute } from './navigation/campusRoute.js';
 import {
   applySceneCalibration,
+  enterARCalibrationView,
+  exitARCalibrationView,
   getSceneCalibration,
   getSceneMirrorLabel,
   isCalibrationNonDefault,
@@ -52,7 +55,7 @@ import { findShortestPath } from './navigation/dijkstra.js';
 import { resolveNavigationCommand } from './llm/navigationAgent.js';
 import { createRouteControls } from './ui/controls.js';
 import { makeWidgetDraggable, setupWidget } from './ui/widgets.js';
-import { initAppMenu, registerDynamicDebugWidget, isDebugModeEnabled } from './ui/appMenu.js';
+import { initAppMenu, registerDynamicDebugWidget, isDebugModeEnabled, registerMenuAction, updateMenuAction } from './ui/appMenu.js';
 import {
   renderRoute,
   clearRoute,
@@ -160,8 +163,8 @@ let outdoorTrackingPanel = null;
 let arRouteProgressPanel = null;
 let indoorARRouteState = null;
 let isARSessionRunning = false;
+let isARModelHiddenInSession = false;
 let arDebugCube = null;
-const arHiddenMeshes = [];
 const mirrorButtonUpdaters = new Set();
 
 function updateMirrorButtons() {
@@ -172,8 +175,6 @@ function refreshIndoorARRouteForMirror() {
   if (!latestARRoute) {
     return;
   }
-
-  const wasAligned = indoorARRouteState?.aligned;
 
   clearIndoorARRouteState();
 
@@ -191,7 +192,7 @@ function refreshIndoorARRouteForMirror() {
     onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
   });
 
-  if (wasAligned && indoorARRouteState && isARSessionRunning && renderer.xr.isPresenting) {
+  if (indoorARRouteState && isARSessionRunning && renderer.xr.isPresenting) {
     alignARRouteForSession(indoorARRouteState, camera, scene, {
       arMode: calibration.mode
     });
@@ -623,6 +624,18 @@ async function bootstrapNavigation() {
 
   initializeRouteControls();
   routeControls?.updateDestinations?.(getDestinations(), navigationState.timetableMeta);
+
+  registerMenuAction('toggle-ar-model', {
+    label: 'Hide 3D model',
+    getLabel: () => (isARModelHiddenInSession ? 'Show 3D model' : 'Hide 3D model'),
+    onClick: () => {
+      if (!isARSessionRunning) {
+        return;
+      }
+
+      setARModelVisible(isARModelHiddenInSession);
+    }
+  });
 
   initAppMenu({
     primary: [
@@ -1239,6 +1252,39 @@ function setupStaticInfoPanel() {
   });
 }
 
+function getARSceneModelMeshes() {
+  return [
+    ...indoorMarkerMeshes,
+    ...Object.values(buildingMeshes),
+    ...Object.values(entranceMeshes),
+    ...per21IndoorStructureMeshes,
+    ...per22IndoorStructureMeshes,
+    ...per17IndoorStructureMeshes,
+    mainRoad,
+    mensaPer17Road,
+    ...pedestrianPathMeshes
+  ].filter(Boolean);
+}
+
+function setARModelVisible(visible) {
+  isARModelHiddenInSession = !visible;
+
+  getARSceneModelMeshes().forEach((mesh) => {
+    mesh.visible = visible;
+  });
+
+  if (isARSessionRunning) {
+    if (visible && latestARRoute?.anchorPosition) {
+      enterARCalibrationView({ position: latestARRoute.anchorPosition });
+    } else {
+      exitARCalibrationView();
+      applySceneCalibration();
+    }
+  }
+
+  updateMenuAction('toggle-ar-model');
+}
+
 function enterARViewMode() {
   if (ground) {
     ground.visible = false;
@@ -1246,37 +1292,27 @@ function enterARViewMode() {
 
   scene.background = null;
 
-  arHiddenMeshes.length = 0;
-
-  const hideIfVisible = (mesh) => {
-    if (mesh?.visible) {
-      arHiddenMeshes.push(mesh);
-      mesh.visible = false;
-    }
-  };
-
-  indoorMarkerMeshes.forEach(hideIfVisible);
-  Object.values(buildingMeshes).forEach(hideIfVisible);
-  Object.values(entranceMeshes).forEach(hideIfVisible);
-  per21IndoorStructureMeshes.forEach(hideIfVisible);
-  per22IndoorStructureMeshes.forEach(hideIfVisible);
-  per17IndoorStructureMeshes.forEach(hideIfVisible);
-
-  [mainRoad, mensaPer17Road, ...pedestrianPathMeshes].forEach(hideIfVisible);
-
   setIndoorRouteVisible(false);
   setRouteVisible(false);
   clearARRoute(scene);
+
+  if (isARModelHiddenInSession) {
+    getARSceneModelMeshes().forEach((mesh) => {
+      mesh.visible = false;
+    });
+  } else if (latestARRoute?.anchorPosition) {
+    enterARCalibrationView({ position: latestARRoute.anchorPosition });
+  }
 }
 
 function exitARViewMode() {
+  exitARCalibrationView();
+
   if (ground) {
     ground.visible = true;
   }
 
   scene.background = new THREE.Color(0xf7f7f4);
-
-  arHiddenMeshes.length = 0;
 
   setBuildingLayerVisible(areBuildingsVisible);
   Object.values(entranceMeshes).forEach((mesh) => {
@@ -1292,6 +1328,7 @@ function exitARViewMode() {
   setPer17IndoorLayerVisible(isPer17IndoorLayerVisible);
   setRouteLayerVisible(areRoutesVisible);
   syncLabelLayerVisibility();
+  applySceneCalibration();
   clearARRoute(scene);
 }
 
@@ -1354,6 +1391,8 @@ function animate() {
   if (!renderer.xr.isPresenting) {
     controls.update();
   }
+
+  tickARRouteAlign();
 
   if (renderer.xr.isPresenting && indoorARRouteState?.active) {
     updateRouteProgress(camera, indoorARRouteState);
