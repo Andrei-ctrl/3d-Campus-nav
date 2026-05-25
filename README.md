@@ -1,454 +1,401 @@
-# AR-assisted Pérolles Campus Navigation
+# 3D Campus Navigation — Pérolles
 
-A Three.js / WebXR prototype for navigating the HEIA-FR Pérolles campus (Fribourg). It combines a 3D campus map, outdoor GPS tracking, indoor pathfinding, timetable-driven course search, voice commands, and WebXR augmented reality for classroom navigation.
+This is my prototype for navigating around the Pérolles campus with a 3D map, outdoor GPS tracking, indoor routing, voice commands, timetable search, and WebXR AR.
 
-**Status:** Academic / research prototype — functional demo, not production-ready campus-wide navigation without on-site calibration.
+The idea is simple: the user chooses where they are and where they want to go, for example a classroom or a course. The app calculates a route on the campus map. Outside, it can follow the user with GPS. Inside, the route can be shown in AR after the user aligns it at an entrance.
 
-**Live build:** GitHub Pages at base path `/3d-Campus-nav/` (build output: `docs/`).
+**Live deployment:**  
+https://andrei-ctrl.github.io/3d-Campus-nav/
 
----
+**YouTube videos:**  
+- Video 1: PASTE_YOUTUBE_LINK_1_HERE  
+- Video 2: PASTE_YOUTUBE_LINK_2_HERE  
+- Video 3: PASTE_YOUTUBE_LINK_3_HERE  
 
-## Table of Contents
-
-- [How Features Work](#how-features-work)
-- [What Is Implemented](#what-is-implemented)
-- [Typical User Flows](#typical-user-flows)
-- [Recent Updates](#recent-updates)
-- [Limitations](#limitations)
-- [Setup](#setup)
-- [Project Structure](#project-structure)
-- [Architecture Notes](#architecture-notes)
-- [Updating the Timetable](#updating-the-timetable)
+This is an academic / research prototype, not a production-ready navigation system.
 
 ---
 
-## How Features Work
+## What the project does
 
-### 1. Map routing (desktop / 3D view)
+The project combines several parts:
 
-**Purpose:** Show the shortest walking route on the campus model before you go outside or enter AR.
+- a 3D model of the Pérolles campus
+- outdoor pathfinding between buildings
+- indoor pathfinding inside buildings
+- GPS progress tracking outside
+- AR route progress inside buildings
+- voice and text commands
+- timetable-based search for courses
+- room labels and route visualization
 
-**Flow:**
-1. You pick a **current location** (entrance anchor) and a **destination** (building or room).
-2. `campusRoute.js` plans the trip:
-   - Same building → indoor graph only.
-   - Different buildings → exit indoors → outdoor graph → re-enter indoors.
-   - PER22 ↔ PER21 can use an **indoor bridge** if that path is shorter than going outside.
-3. `dijkstra.js` finds the shortest path on each graph.
-4. **Blue lines** = outdoor segments (`routeRenderer.js`).
-5. **Green lines** = indoor segments (`indoorRouteRenderer.js`), drawn above buildings for visibility.
+The main buildings used in the project are:
 
-**Important:** This is a **simplified graph model**, not a scanned map of real corridors. Node positions are approximate metres on a flat campus plane.
+- PER21
+- PER22
+- PER17
+- Mensa
+
+The app is built with **Three.js**, **Vite**, **WebXR**, browser **Geolocation API**, and **SheetJS/xlsx** for the timetable file.
 
 ---
 
-### 2. Outdoor GPS tracking
+## Main navigation idea
 
-**Purpose:** Track your real movement outdoors and advance route progress toward the next path node.
+There are two different navigation modes.
 
-**Why GPS outdoors?** GPS works in open spaces. It fails indoors, so indoor navigation uses WebXR instead (see below).
+### Outside
 
-**How it works:**
+Outside, the app uses GPS.
 
-```
-Phone GPS (lat/lon)
-    ↓
-convertGpsToLocalPosition()  — flat-earth conversion from origin
-    ↓
-Campus X/Z coordinates (metres)
-    ↓
-Compare distance to next outdoor route node
-    ↓
-Advance node when within ~6 m threshold
+The phone gives latitude and longitude. The app converts this into local campus coordinates and compares the user position with the next point of the outdoor route.
+
+So outside the logic is:
+
+```text
+GPS position
+→ convert to campus X/Z coordinates
+→ compare with next outdoor route node
+→ update progress
 ```
 
-**Key files:**
-- `src/navigation/outdoorRouteProgress.js` — `watchPosition`, progress logic, blue user marker
-- `src/data/outdoorGpsOrigin.js` — reference point at PER21 main entrance (`46.79307, 7.15258`)
+The blue marker on the map shows the estimated GPS position.
 
-**Behaviour:**
-- Starts **automatically** when you calculate a route with an outdoor leg.
-- Updates: distance to next point, remaining distance, GPS accuracy, instruction text.
-- **Blue sphere** on the 3D map = your estimated GPS position (does not move the camera).
-- **6 m threshold** — larger than indoor AR (~1.5 m) because consumer GPS is typically ±5–15 m.
-- Stops when you **Clear Route** or switch to a route without an outdoor leg.
-- At a building entrance with an indoor leg, shows a message to start indoor AR.
+### Inside
 
-**Requirements:** HTTPS (or localhost), location permission, phone with real GPS (desktop often gives poor or no GPS).
+Inside, GPS is not reliable, so the app uses WebXR camera movement.
 
-**Calibration:** If the blue marker is offset on the map, adjust latitude/longitude in `outdoorGpsOrigin.js` on site at PER21 main entrance.
+The user stands at a known entrance, points the phone in the corridor direction, and taps **Align AR Route**. Then the green route is fixed in the AR world. When the user walks in reality, WebXR updates the camera position automatically.
 
----
+So inside the logic is:
 
-### 3. Timetable & course search
-
-**Purpose:** Navigate by **course name** from the official HEIA-FR timetable export, not hardcoded aliases.
-
-**How it works:**
-1. At startup, `timetableLoader.js` loads `src/timetable_en_24-05-2026_23-52-48.xlsx` via the `xlsx` library.
-2. For each course row, it reads **Long title**, **excel.code**, and **Schedule**.
-3. Schedule locations are parsed with regex: `(PER 21, Room G230)` / `(PER 17, Salle 001)`.
-4. Room strings are mapped to app destination IDs (e.g. `PER21_G230`, `PER22_AUDITORIUM_JOSEPH_DEISS` for Room 002).
-5. Course titles and codes become **search aliases** on those rooms in `destinations.js`.
-6. `navigationAgent.js` matches your text/voice command against all aliases.
-
-**Route panel** shows: `Course timetable: 14/18 courses mapped (4 unmapped)`.
-
-**Unmapped courses** occur when:
-- Schedule has no room location.
-- Room exists in Excel but not in the 3D campus model (e.g. A120, E130).
-- Schedule format does not match the parser regex.
-
-Courses **not in the Excel file** (e.g. a removed or unlisted course) will **not** match any destination.
-
----
-
-### 4. Voice & text commands
-
-**Purpose:** Set destination without using dropdowns.
-
-**How it works:**
-- **Text:** type in Route Navigation → **Run Command**.
-- **Voice:** **Speak** button → Web Speech API (`en-US`, single utterance) → same parser.
-- `navigationAgent.js` normalizes text (accents, spacing, patterns like `PER 21 G230` → `per21 g230`).
-- Scores matches against destination names, room aliases, and timetable course aliases.
-- Supports `from X to Y`, `take me to …`, spoken “I am at … go to …” patterns.
-
-**Note:** Despite the `llm/` folder name, parsing is **rule-based**, not a large language model.
-
----
-
-### 5. WebXR AR mode
-
-**Purpose:** See navigation overlays in the phone camera view while walking.
-
-**How it works:**
-1. Calculate a route first.
-2. Tap **Start AR** → `arSession.js` requests an `immersive-ar` session (`local-floor`).
-3. Camera feed replaces the desktop view; campus mesh may be repositioned via scene calibration.
-4. Two AR route modes:
-   - **Outdoor-only routes:** legacy scaled route via `arRouteRenderer.js` (heavily compressed, `arScale` ~0.05).
-   - **Indoor classroom routes:** new system via `indoorRouteProgress.js` (metre-scale, see below).
-
-**Requirements:** Android Chrome + ARCore, HTTPS, user permission for camera/motion.
-
----
-
-### 6. Indoor AR route progress
-
-**Purpose:** Fixed green path on the floor in AR; progress as you physically walk.
-
-**Why WebXR camera indoors?** Phone AR tracking (VIO) works inside buildings; GPS does not.
-
-**How it works:**
-
-```
-Indoor graph path (room → corridor → stairs → room)
-    ↓
-Convert nodes to metre offsets from entrance anchor
-    ↓
-Create green cylinder segments (NOT LineBasicMaterial — mobile-safe)
-    ↓
-User stands at entrance, taps "Align AR Route"
-    ↓
-Route group placed at camera X/Z, rotated to match phone heading
-    ↓
-Route stays FIXED in AR world space
-    ↓
-Each frame: compare WebXR camera position to next node
-    ↓
-Advance when within ~1.5 m; update turn instructions
+```text
+WebXR camera position
+→ compare with next indoor route node
+→ update instruction
+→ advance along the route
 ```
 
-**Align step (critical):**
-- Uses **one-shot** position + heading at the entrance.
-- Does **not** scan the real building or detect floors/stairs automatically.
-- Green line follows the **3D graph**, not LiDAR geometry — it will not perfectly sit on real stairs unless the model matches reality.
-
-**Instructions:** Go straight / Turn left / Turn right / Take stairs or elevator / Go to room X.
-
-**Key files:** `src/ar/indoorRouteProgress.js`, `src/ui/arRouteProgressPanel.js`.
+The camera is not moved manually. The phone movement moves it through WebXR.
 
 ---
 
-### 7. Scene calibration
+## Routing
 
-**Purpose:** Dev/demo tuning when the 3D map or AR overlay does not match physical space.
+The project uses graph-based routing.
 
-- Global and per-group scale (buildings, PER21/22/17 interior, paths, routes).
-- AR offset X/Y/Z and AR scale for outdoor AR prototype mode.
-- Saved to `localStorage`.
-- Does **not** replace on-site GPS or AR entrance alignment for production use.
+Each building, entrance, corridor, classroom, stair, or important point can be a node. The connections between them are graph edges. The app uses Dijkstra to find the shortest path.
 
----
+The route planner can combine:
 
-### 8. UI & widgets
+- indoor graph
+- outdoor graph
+- indoor bridge between PER21 and PER22
+- entrance nodes
+- classroom nodes
 
-- All panels are **draggable** (header bar) and **minimizable**.
-- **Show/Hide** (bottom-right) toggles visibility of every panel (`opacity: 0`, non-interactive) except itself.
-- **Layer toggles** (bottom-right): buildings, routes, PER21/22/17 interior, **Labels**.
-- Outdoor GPS panel is toggled like other widgets (visible when UI is shown).
+The route colors are:
 
----
-
-## What Is Implemented
-
-### 3D campus scene
-- PER21, PER22, PER17, Mensa — buildings, roads, pedestrian paths, entrances
-- PER21 detailed interior: uniform classroom row, lift/stair cores at side entrances, floor-2 front/back upper rooms
-- PER22 / PER17 simplified interiors
-- Indoor room labels (PER21 all rooms, PER22 library) — compact sprites above room volumes
-- Layer toggles, click-to-inspect, Show/Hide, draggable widgets
-
-### Outdoor navigation
-- Dijkstra routing on campus graph + cross-building planner
-- PER17: Mensa → **main entrance** path (not under-building shortcut to back entrance)
-- PER22 ↔ PER21 indoor bridge when shorter
-- Blue outdoor route + route info panel
-
-### Outdoor GPS progress
-- Auto-start, blue GPS marker, distances, accuracy, entrance handoff message
-
-### Indoor navigation (map)
-- PER21 full room graph (floor 1 back row + floor 2 upper rooms); PER17 three rooms + back entrance; PER22 auditorium + library
-- Green indoor routes, room markers, floating room labels
-
-### Timetable, voice, AR
-- Excel-driven course → room mapping
-- Voice + text commands
-- WebXR AR + indoor align + progress
-- Scene calibration panel
+- **blue** for outdoor route segments
+- **green** for indoor route segments
 
 ---
 
-## Typical User Flows
+## Voice and text commands
 
-### Find a classroom by course name
-1. Select current location → type/speak course name → **Show Route**
-2. Follow blue (outdoor) then green (indoor) lines on the map
+The user can either select a destination manually, type a command, or use the voice button.
 
-### Outdoor GPS walk
-1. Show cross-building route → GPS auto-starts
-2. Use **Outdoor GPS Tracking** panel (Show/Hide to reveal UI)
-3. Walk; blue marker and distances update
-4. At building entrance → **Start AR** for indoor leg
+Examples:
 
-### Indoor AR navigation
-1. Show route to classroom → **Start AR** at entrance
-2. Point along corridor → **Align AR Route**
-3. Walk; green route stays fixed; instructions update per node
+```text
+Take me to G230
+Go to Auditorium Joseph Deiss
+Navigate to PER21
+I am at Mensa, go to PER17
+```
+
+The command parser is rule-based. It normalizes the text and tries to match rooms, buildings, course names, and aliases.
+
+Even though there is an `llm` folder in the project, the current command parsing is not really using a large language model.
 
 ---
 
-## Recent Updates
+## Timetable search
 
-Summary of major changes during prototype development:
+The app loads an Excel timetable file and extracts course names, course codes, and room locations.
 
-| Area | Update |
-|------|--------|
-| **PER21 layout** | Uniform wing sizing in `per21Layout.js` — all cubes/classrooms/corridors scaled together (15:10 ratio) and packed contiguously A-side (x = 132) → H-side (x = −10, 10 m outside building). Floor 1 back row: `*140` cubes + `*130` classrooms (B–F) with A–B and G–H corridor gaps. Floor 2 back row: `*230` aligned above matching `*130`; A230/G230 in corridor bays. Floor 2 front row: B205/B207 and F205/F207 on opposite facade (z = 41). Per-room `size` and `z` drive 3D volumes and nav nodes. |
-| **PER21 labels** | Smaller elevated room-label sprites in `createIndoorMarkers.js`; `depthTest: false` so labels stay visible above transparent room boxes |
-| **PER17 paths** | Removed duplicate back→main graph edge; Mensa routes to **PER17 main entrance** via east path, not under-building line to back entrance; removed orphan `PATH_PER17_APPROACH` visual path |
-| **PER17 indoor graph** | Added back entrance node, back corridor, full connectivity for Salle 001 / 010 / 036 |
-| **Outdoor GPS** | New `outdoorRouteProgress.js` module; auto-start on route; blue user marker; Outdoor GPS Tracking panel |
-| **Timetable** | Excel file loaded at startup; course titles map to rooms; removed hardcoded course aliases from `rooms.js` |
-| **Indoor AR progress** | `indoorRouteProgress.js` + Align AR Route + camera-based node progress + turn instructions |
-| **Entrances** | Single source of truth in `entrances.js`; anchors/graph/markers derived via `entranceUtils.js` |
-| **Scene calibration** | Replaced old AR-only panel; per-group scales; localStorage persistence |
-| **UI** | Show/Hide all widgets; draggable outdoor GPS and indoor AR panels; Labels layer toggle |
-| **Routing** | Full cross-building `campusRoute.js`; PER21↔PER22 indoor bridge |
-| **README** | Documented features, flows, limitations, architecture |
+This means the user can search by course name, not only by room number.
+
+For example, if a course is scheduled in `PER 21, Room G230`, the app can map this course to the destination `PER21_G230`.
+
+Some courses are still unmapped because:
+
+- the room is not modeled yet
+- the timetable row has no clear room
+- the parser does not understand the schedule format
+- the room exists in real life but not in the 3D graph yet
+
+---
+
+## AR mode
+
+The AR part is made with WebXR.
+
+The main idea is that the route is placed in the real world, not attached to the screen. When the user walks, the camera pose changes automatically.
+
+For indoor AR, the user must:
+
+1. calculate a route first
+2. start AR
+3. stand at the selected entrance
+4. point the phone along the corridor
+5. tap **Align AR Route**
+6. follow the green route
+
+This is still a prototype. It does not scan the real building and it does not use QR codes or persistent anchors yet.
+
+---
+
+## Outdoor GPS progress
+
+Outdoor progress starts when the route has an outdoor part.
+
+The app watches the GPS position with:
+
+```js
+navigator.geolocation.watchPosition(...)
+```
+
+Then it displays:
+
+- distance to the next route point
+- remaining distance
+- GPS accuracy
+- current progress state
+- estimated user marker
+
+The GPS threshold is intentionally larger than indoor AR because GPS can easily be several meters wrong.
+
+---
+
+## Indoor AR progress
+
+Indoor progress is based on the WebXR camera position.
+
+The route is made from green cylinder segments instead of only a normal Three.js line, because line width is not reliable on mobile browsers.
+
+The progress system checks the distance between the camera and the next route node. When the user is close enough, it advances to the next instruction.
+
+Possible instructions are simple:
+
+- continue along the green route
+- turn left
+- turn right
+- take stairs or elevator
+- you have arrived
+
+---
+
+## What is implemented
+
+### Campus and buildings
+
+- PER21, PER22, PER17, and Mensa are present
+- roads and pedestrian paths are shown
+- entrances are represented as navigation anchors
+- labels can be shown or hidden
+- widgets can be dragged and minimized
+
+### Navigation
+
+- outdoor graph routing
+- indoor graph routing
+- cross-building routing
+- PER21 to PER22 indoor bridge logic
+- blue outdoor route
+- green indoor route
+
+### GPS
+
+- GPS tracking outside
+- blue user marker
+- distance and accuracy display
+- automatic handoff message when the user reaches an entrance
+
+### AR
+
+- WebXR AR session
+- indoor route alignment
+- camera-based indoor progress
+- AR instruction panel
+
+### Timetable and commands
+
+- Excel timetable loading
+- course-to-room mapping
+- text commands
+- voice commands with the Web Speech API
 
 ---
 
 ## Limitations
 
-### General
-- **Prototype, not production app** — intended for demos and research, not daily use by all students without further work.
-- **Simplified 3D model** — building geometry, corridors, and room positions are approximate (~132 m × 38 m PER21 footprint), not a surveyed BIM model. PER21 classroom sizes are **uniformly scaled** (~11.2 m cubes, ~7.5 m classrooms) to fit the measured row; original sketch used 15 m / 10 m proportions.
-- **No automated tests or CI** — routing and timetable parsing are manually verified.
-- **English-only voice** (`en-US`) on a bilingual campus; French/German course titles work in text if in the Excel file.
+This project is still a prototype, so there are important limitations.
 
-### GPS (outdoor)
-- **Hardcoded GPS origin** at PER21 main entrance — must be **calibrated on site** or the blue marker and progress will be wrong.
-- **Flat-earth conversion** — no rotation correction vs campus model orientation (+15° building rotation in data).
-- **Accuracy ± several metres** — 6 m node threshold hides some error but routes can feel early/late.
-- **Desktop browsers** — often no real GPS; testing requires a phone outdoors over **HTTPS**.
-- **Indoors / under roofs** — GPS unreliable; use indoor AR after entering the building.
-- GPS moves a **map marker only** — the 3D orbit camera is never driven by GPS.
+The 3D campus model is approximate. It is not a scanned BIM model and it is not perfectly aligned with the real building.
 
-### Timetable
-- **Static Excel snapshot** — not live sync with HEIA-FR timetable server.
-- **Partial room coverage** — courses scheduled in rooms not modeled (A120, E130, etc.) appear as unmapped.
-- **Parser regex** — only understands `(PER N, Room/Salle XXX)` in schedule strings.
-- **Ambiguous commands** — one course name mapped to two rooms (e.g. two time slots) picks the first match.
+GPS outside is also approximate. It can be wrong by several meters, especially near buildings or under roofs.
 
-### Indoor map routing
-- **PER21 only** has broad room coverage; PER17 (3 rooms) and PER22 (2 POIs) are sparse.
-- **PER21 floors 3–4** have corridor/stair nodes but few or no room destinations.
-- Indoor routes are drawn **above** building shells for visibility, not on the real floor plan inside the mesh.
-- **Stairs in the graph** are straight lines between nodes — not step-by-step geometry.
+Indoor AR needs manual alignment. The user has to stand at the entrance and point the phone in the correct direction. If the alignment is bad, the route will also be shifted.
 
-### AR (WebXR)
-- **Manual align required** — no WebXR hit-test, QR markers, or persistent AR anchors in the building.
-- **One-shot alignment** — stand at entrance, face corridor, tap Align; any model error accumulates along the path.
-- **Green line ≠ real stairs** — route follows graph coordinates, not scanned stair geometry; straight segments through stair nodes will not match each physical step.
-- **Outdoor AR route** uses heavy scale compression (`arScale` 0.05) — prototype overlay, not georeferenced to GPS.
-- **Indoor AR scale** uses graph metres — only as accurate as the indoor graph + your align quality.
-- **Device support** — primarily Android Chrome + ARCore; iOS WebXR support varies.
-- **No AR outdoors + indoors handoff automation** — user must manually Start AR and Align at the entrance.
+The app does not yet use:
 
-### Navigation logic
-- **“Anchors” are map coordinates**, not Apple/Google AR geo-anchors or VPS.
-- **PER21↔PER22 outdoor graph** has no direct outdoor link — passage is indoor-only by design.
-- **Voice/text parser** can mis-hear or mis-match similar names; no confirmation dialog before routing.
-- Errors often use browser **`alert()`** — not polished in-app error UI.
+- QR codes
+- visual positioning system
+- persistent AR anchors
+- real scanned floor plans
+- automatic floor detection
+- live timetable synchronization
 
-### Code / maintenance
-- `src/llm/commandParser.js` and `src/ar/arCalibration.js` are **unused** legacy files.
-- Room numbering in code (`*140`, `*130`, `*230`, `*205`, `*207`) reflects the current model, not necessarily all official campus signage.
-
-### What would be needed for “production quality”
-1. On-site GPS + per-entrance AR calibration (or QR markers at entrances).
-2. Accurate room registry aligned with timetable and real signage.
-3. Live or easy-to-refresh timetable integration.
-4. WebXR hit-test or marker-based anchoring for indoor AR.
-5. Expanded PER17/PER22 indoor graphs.
-6. Demo mode hiding calibration/debug panels.
+Also, iPhone browser AR support is limited. The best target is Android Chrome with ARCore.
 
 ---
 
 ## Setup
 
-### Prerequisites
-- Node.js 16+, npm
-- WebGL browser
-- **GPS:** HTTPS + location permission + phone recommended
-- **AR:** HTTPS + Android Chrome + ARCore
-
-### Install & run
+Install dependencies:
 
 ```bash
 npm install
+```
+
+Run locally:
+
+```bash
 npm run dev
 ```
 
-### Production build
+Build for deployment:
 
 ```bash
 npm run build
 ```
 
-Output: `docs/` for GitHub Pages.
+The build output is in:
+
+```text
+docs/
+```
+
+This is used for GitHub Pages.
 
 ---
 
-## Project Structure
+## Project structure
 
-```
+```text
 src/
-├── main.js                         # Entry, routing, AR loop, GPS auto-start
-├── timetable_en_24-05-2026_23-52-48.xlsx
+├── main.js
 ├── ar/
-│   ├── arSession.js                # WebXR session
-│   ├── arRouteRenderer.js          # Outdoor AR route (scaled)
-│   ├── arRouteAdapter.js           # Anchor-relative coords
-│   └── indoorRouteProgress.js      # Indoor AR align + progress
+│   ├── arSession.js
+│   ├── arRouteRenderer.js
+│   ├── arRouteAdapter.js
+│   └── indoorRouteProgress.js
 ├── data/
-│   ├── graph.js                    # Outdoor campus graph
-│   ├── pedestrianPaths.js          # Grey visual paths
-│   ├── entrances.js                # Entrance positions (source of truth)
-│   ├── outdoorGpsOrigin.js         # GPS origin
-│   ├── timetableLoader.js          # Excel parser
-│   ├── per21Layout.js              # PER21 uniform row layout (sizes, positions)
-│   ├── per21IndoorGraph.js         # PER21 indoor nav graph
-│   ├── per22IndoorGraph.js         # PER22 indoor nav graph
-│   └── per17IndoorGraph.js         # PER17 3-room graph
+│   ├── graph.js
+│   ├── pedestrianPaths.js
+│   ├── entrances.js
+│   ├── outdoorGpsOrigin.js
+│   ├── timetableLoader.js
+│   ├── per21Layout.js
+│   ├── per21IndoorGraph.js
+│   ├── per22IndoorGraph.js
+│   └── per17IndoorGraph.js
 ├── navigation/
 │   ├── campusRoute.js
-│   ├── outdoorRouteProgress.js     # GPS tracking
-│   ├── routeRenderer.js            # Blue outdoor routes
-│   └── indoorRouteRenderer.js      # Green indoor routes
+│   ├── outdoorRouteProgress.js
+│   ├── routeRenderer.js
+│   └── indoorRouteRenderer.js
 ├── scene/
-│   ├── createIndoorMarkers.js      # Room markers + floating labels
+│   ├── createIndoorMarkers.js
 │   ├── createPer21IndoorStructure.js
 │   ├── createPer22IndoorStructure.js
 │   └── createPer17IndoorStructure.js
 └── ui/
-    ├── controls.js                 # Route + voice + timetable status
+    ├── controls.js
     ├── outdoorTrackingPanel.js
     ├── arRouteProgressPanel.js
     ├── calibrationPanel.js
-    └── widgets.js                  # Drag + Show/Hide
+    └── widgets.js
 ```
 
 ---
 
-## Architecture Notes
+## Important technical notes
 
-### Coordinate system
-- **X / Z:** horizontal plane (metres)
-- **Y:** height
-- Entrances, graphs, GPS share the same map space
+The project coordinate system is:
 
-### Position sources by context
+```text
+X / Z = horizontal campus plane
+Y = height
+```
 
-| Context | Source | Camera moved? | Threshold |
-|---------|--------|---------------|-----------|
-| Desktop map | Orbit controls | User drag | — |
-| Outdoor progress | GPS → X/Z | No | ~6 m |
-| Indoor AR progress | WebXR camera | Phone AR (automatic) | ~1.5 m |
+Position source depends on the context:
 
-### PER17 routing (outdoor)
-- Mensa → east path (`z = -20`) → PER17 main entrance → front lane (`z = -40`)
-- Back entrance reachable via front/back lane only when route requires it
+| Context | Position source | What moves |
+|---|---|---|
+| Desktop map | Orbit controls | User moves the view manually |
+| Outdoor progress | GPS | User marker moves |
+| Indoor AR | WebXR camera pose | Camera moves from real phone movement |
 
-### PER21 classroom row (`per21Layout.js`)
-
-Single source of truth for PER21 room positions, sizes, and corridor stops. Layout is computed once at load:
-
-| Row | Z (local) | Rooms |
-|-----|-----------|--------|
-| Floor 1 back | 71 | A140 → A–B corridor → B140/B130 … F140/F130 → G140 → G–H corridor → H130 |
-| Floor 2 back | 71 | A230, B230–F230 (above matching 130), G230 |
-| Floor 2 front | 41 | B205/B207, F205/F207 (half-bay split under B and F wings) |
-
-**Sizing:** 8 cubes + 5 classrooms + 2 corridor gaps fill a 142 m span (132 m building + 10 m H-side overflow). All wings share the same scaled dimensions while keeping the original 15:10 cube:classroom ratio (~11.2 m / ~7.5 m at current scale).
-
-**Consumers:** `createPer21IndoorStructure.js` (3D volumes), `per21IndoorGraph.js` (nav nodes), `rooms.js` (registry dimensions).
-
-### PER21 vertical circulation (visual)
-- Lift/stair shafts at **side entrance X positions**, **front facade Z**, starting at **ground level (y = 0)**
-
-### Indoor room labels
-- PER21: label on every routable room; PER22: library (and markers as configured in `main.js`)
-- Compact canvas sprites, elevated per floor, rendered with `depthTest: false` so they are not hidden inside transparent room boxes
-- Toggle via **Labels** checkbox in the layer panel
+The route itself should stay fixed in the world.
 
 ---
 
-## Updating the Timetable
+## Updating the timetable
 
-1. Export new course programme Excel from HEIA-FR timetable
-2. Place in `src/` and update import in `src/data/timetableLoader.js`:
-   ```js
-   import timetableAssetUrl from '../your-new-file.xlsx?url';
-   ```
-3. `npm run build`
-4. Check Route Navigation panel for mapped / unmapped counts
-5. Add room overrides in `TIMETABLE_ROOM_OVERRIDES` in `timetableLoader.js` if needed
+To update the timetable:
+
+1. export a new Excel file from the timetable system
+2. put it inside `src/`
+3. update the import in `src/data/timetableLoader.js`
+4. run the build again
+5. check how many courses are mapped and unmapped
+
+Example:
+
+```js
+import timetableAssetUrl from '../your-new-file.xlsx?url';
+```
 
 ---
 
 ## Dependencies
 
-- [Three.js](https://threejs.org/) ^0.160
-- [Vite](https://vitejs.dev/) ^5
-- [SheetJS (xlsx)](https://sheetjs.com/) ^0.18
+- Three.js
+- Vite
+- SheetJS / xlsx
+- WebXR
+- browser Geolocation API
+- Web Speech API
 
 ---
 
-## License
+## What could be improved later
 
-Prototype for academic / campus navigation research at HEIA-FR Pérolles.
+The most important improvements would be:
 
+1. better measured indoor layout
+2. more rooms for PER17 and PER22
+3. QR code or marker-based AR alignment
+4. real entrance calibration
+5. better GPS origin and map rotation correction
+6. live timetable update
+7. cleaner mobile UI
+8. production demo mode without debug panels
+
+---
+
+## License / context
+
+This project was made as an academic prototype for spatial computing and AR/VR campus navigation at the Pérolles campus.
