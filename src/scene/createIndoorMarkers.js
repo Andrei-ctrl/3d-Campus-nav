@@ -1,11 +1,22 @@
 import * as THREE from 'three';
+import { FLOOR_HEIGHT, buildingHeight } from '../data/buildings.js';
+
+const MARKER_BASE_Y_BY_BUILDING = {
+  PER21: buildingHeight(5) + 0.5,
+  PER22: buildingHeight(2) + 0.5,
+  PER17: buildingHeight(2) + 0.5
+};
+
+function markerBaseY(buildingId) {
+  return MARKER_BASE_Y_BY_BUILDING[buildingId] ?? 9.5;
+}
 
 function createRoomMarker(room, roomNode, color = 0x2196f3) {
   const geometry = new THREE.CylinderGeometry(1.8, 1.8, 0.35, 20);
   const material = new THREE.MeshBasicMaterial({ color });
 
   const marker = new THREE.Mesh(geometry, material);
-  const y = 9.5 + (roomNode.floor || 0) * 3;
+  const y = markerBaseY(room.buildingId) + (roomNode.floor || 0) * FLOOR_HEIGHT;
 
   marker.position.set(roomNode.x, y, roomNode.z);
 
@@ -29,7 +40,7 @@ function createNavigationMarker(nodeId, node, buildingId) {
   });
 
   const marker = new THREE.Mesh(geometry, material);
-  const y = 9.8 + (node.floor || 0) * 3;
+  const y = markerBaseY(buildingId) + 0.3 + (node.floor || 0) * FLOOR_HEIGHT;
 
   marker.position.set(node.x, y, node.z);
 
@@ -48,9 +59,8 @@ const LABEL_SCALE = { x: 7, y: 2.2 };
 const LABEL_CANVAS = { width: 256, height: 96 };
 const LABEL_FONT = 'bold 26px Arial';
 
-function labelHeightForFloor(floor = 0) {
-  // Sit just above room volumes (cubes ~18 m, upper rooms ~20 m).
-  return 18 + floor * 4.5;
+function labelHeightForFloor(buildingId, floor = 0) {
+  return markerBaseY(buildingId) + 7.5 + floor * FLOOR_HEIGHT;
 }
 
 function createRoomLabel(room, roomNode) {
@@ -76,7 +86,7 @@ function createRoomLabel(room, roomNode) {
   });
 
   const sprite = new THREE.Sprite(material);
-  const y = labelHeightForFloor(roomNode.floor || 0);
+  const y = labelHeightForFloor(room.buildingId, roomNode.floor || 0);
 
   sprite.position.set(roomNode.x, y, roomNode.z);
   sprite.scale.set(LABEL_SCALE.x, LABEL_SCALE.y, 1);

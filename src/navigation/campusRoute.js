@@ -2,6 +2,7 @@ import { graph } from '../data/graph.js';
 import { findShortestPath } from './dijkstra.js';
 import { calculateRouteDistance } from './routeRenderer.js';
 import { getEntranceBuildingId } from '../data/per21EntranceRouting.js';
+import { FLOOR_HEIGHT } from '../data/buildings.js';
 
 const INDOOR_BUILDING_BRIDGES = [
   {
@@ -30,7 +31,7 @@ function calculateIndoorRouteDistance(indoorGraph, pathNodeIds) {
 
     const dx = endNode.x - startNode.x;
     const dz = endNode.z - startNode.z;
-    const floorDelta = ((endNode.floor || 0) - (startNode.floor || 0)) * 3;
+    const floorDelta = ((endNode.floor || 0) - (startNode.floor || 0)) * FLOOR_HEIGHT;
 
     total += Math.sqrt(dx * dx + dz * dz + floorDelta * floorDelta);
   }

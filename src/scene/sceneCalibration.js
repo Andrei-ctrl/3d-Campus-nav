@@ -1,3 +1,5 @@
+import { buildingHeight } from '../data/buildings.js';
+
 const STORAGE_KEY = 'sceneCalibration';
 const LEGACY_STORAGE_KEY = 'arCalibration';
 const STORAGE_VERSION = 5;
@@ -185,8 +187,8 @@ export function unregisterCalibratedObject(object) {
 
 const AR_BASE_Y_BY_GROUP = {
   buildings: 0,
-  per21Indoor: 9,
-  per22Indoor: 9,
+  per21Indoor: buildingHeight(5) + 1,
+  per22Indoor: 0,
   per17Indoor: 9,
   markers: 9,
   paths: 0,
