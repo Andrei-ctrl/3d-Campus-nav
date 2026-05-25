@@ -5,7 +5,8 @@ import { renderARRoute, clearARRoute, setARRouteVisible } from './ar/arRouteRend
 import {
   clearIndoorARRoute,
   prepareIndoorARRoute,
-  updateRouteProgress
+  updateRouteProgress,
+  anchorRouteToCurrentCamera
 } from './ar/indoorRouteProgress.js';
 import { convertRouteToAnchorRelative } from './ar/arRouteAdapter.js';
 import { anchors, getAnchorById, getAnchorForEntranceId } from './data/anchors.js';
@@ -31,8 +32,10 @@ import {
   enterARCalibrationView,
   exitARCalibrationView,
   getSceneCalibration,
+  getSceneMirrorLabel,
   registerCalibratedObject,
   registerCalibratedObjects,
+  toggleSceneMirrorX,
   unregisterCalibratedObject
 } from './scene/sceneCalibration.js';
 import { createCalibrationPanel } from './ui/calibrationPanel.js';
@@ -49,7 +52,8 @@ import { findShortestPath } from './navigation/dijkstra.js';
 
 import { resolveNavigationCommand } from './llm/navigationAgent.js';
 import { createRouteControls } from './ui/controls.js';
-import { makeWidgetDraggable, setupWidget, createUIVisibilityToggle } from './ui/widgets.js';
+import { makeWidgetDraggable, setupWidget } from './ui/widgets.js';
+import { initAppMenu, registerDynamicDebugWidget, isDebugModeEnabled } from './ui/appMenu.js';
 import {
   renderRoute,
   clearRoute,
@@ -156,6 +160,68 @@ let arRouteProgressPanel = null;
 let indoorARRouteState = null;
 let isARSessionRunning = false;
 let arDebugCube = null;
+const arHiddenMeshes = [];
+const mirrorButtonUpdaters = new Set();
+
+function updateMirrorButtons() {
+  mirrorButtonUpdaters.forEach((updater) => updater());
+}
+
+function refreshIndoorARRouteForMirror() {
+  if (!latestIndoorARRoute) {
+    return;
+  }
+
+  const wasAligned = indoorARRouteState?.aligned;
+  const callbacks = {
+    onUpdate: (state) => arRouteProgressPanel?.refreshUI?.(state),
+    onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
+  };
+
+  clearIndoorARRouteState();
+
+  const calibration = getSceneCalibration();
+  indoorARRouteState = prepareIndoorARRoute(scene, {
+    ...latestIndoorARRoute,
+    arOptions: { arMirrorX: calibration.arMirrorX ?? -1 }
+  }, callbacks);
+
+  if (wasAligned && isARSessionRunning && renderer.xr.isPresenting) {
+    anchorRouteToCurrentCamera(
+      indoorARRouteState.routeGroup,
+      camera,
+      indoorARRouteState,
+      scene
+    );
+  }
+
+  arRouteProgressPanel?.setPrepared?.(true);
+  arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
+}
+
+function handleSceneMirrorToggle() {
+  toggleSceneMirrorX();
+  refreshIndoorARRouteForMirror();
+  updateMirrorButtons();
+}
+
+function createSceneMirrorButton(className = 'scene-mirror-button') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = `Flip scene ↔ (${getSceneMirrorLabel()})`;
+
+  const syncLabel = () => {
+    button.textContent = `Flip scene ↔ (${getSceneMirrorLabel()})`;
+  };
+
+  mirrorButtonUpdaters.add(syncLabel);
+  syncLabel();
+
+  button.addEventListener('click', handleSceneMirrorToggle);
+
+  return button;
+}
 
 function buildIndoorARRoute(routePlan, toDestination, fromEntranceId = null) {
   if (!toDestination || toDestination.type !== 'room') {
@@ -467,6 +533,20 @@ async function bootstrapNavigation() {
 
   initializeRouteControls();
   routeControls?.updateDestinations?.(getDestinations(), navigationState.timetableMeta);
+
+  initAppMenu({
+    primary: [
+      { id: 'route-controls', label: 'Route Navigation' },
+      { id: 'ar-calibration-panel', label: 'Scaling' },
+      { id: 'ar-start-widget', label: 'Start AR' }
+    ],
+    debugIds: [
+      'info-panel',
+      'layer-controls',
+      'outdoor-tracking-panel',
+      'ar-route-progress-panel'
+    ]
+  });
 }
 
 bootstrapNavigation();
@@ -744,19 +824,24 @@ function displayObjectInfo(object) {
 
   html += '</div>';
   panel.innerHTML = html;
-  panel.style.display = 'block';
 
   setupWidget(panel, {
     header: panel.querySelector('.selected-info-header'),
     content: panel.querySelector('.selected-info-content')
   });
+
+  registerDynamicDebugWidget(panel);
+
+  if (isDebugModeEnabled()) {
+    panel.classList.remove('widget-hidden');
+  }
 }
 
 function hideObjectInfo() {
   const panel = document.getElementById('selected-info');
 
   if (panel) {
-    panel.style.display = 'none';
+    panel.classList.add('widget-hidden');
   }
 }
 
@@ -768,6 +853,7 @@ function displayRouteInfo(path, distance, fromDestination, toDestination, indoor
     panel.id = 'route-info';
     panel.className = 'route-info';
     document.getElementById('ui').appendChild(panel);
+    registerDynamicDebugWidget(panel);
   }
 
   const outdoorSteps = path.length > 0
@@ -818,7 +904,6 @@ function displayRouteInfo(path, distance, fromDestination, toDestination, indoor
   </div>
 `;
 
-  panel.style.display = 'block';
   const minimizeButton = document.getElementById('route-info-minimize');
 
   if (minimizeButton) {
@@ -830,13 +915,17 @@ function displayRouteInfo(path, distance, fromDestination, toDestination, indoor
   }
 
   makeWidgetDraggable(panel, panel.querySelector('.route-info-header'));
+
+  if (isDebugModeEnabled()) {
+    panel.classList.remove('widget-hidden');
+  }
 }
 
 function hideRouteInfo() {
   const panel = document.getElementById('route-info');
 
   if (panel) {
-    panel.style.display = 'none';
+    panel.classList.add('widget-hidden');
   }
 }
 
@@ -893,32 +982,19 @@ async function createARButton() {
     enterARCalibrationView(latestAnchor);
 
     if (hasIndoorRoute) {
-      indoorARRouteState = prepareIndoorARRoute(scene, latestIndoorARRoute, {
+      const calibration = getSceneCalibration();
+
+      indoorARRouteState = prepareIndoorARRoute(scene, {
+        ...latestIndoorARRoute,
+        arOptions: { arMirrorX: calibration.arMirrorX ?? -1 }
+      }, {
         onUpdate: (state) => arRouteProgressPanel?.refreshUI?.(state),
         onInstruction: () => arRouteProgressPanel?.refreshUI?.(indoorARRouteState)
       });
       arRouteProgressPanel?.setPrepared?.(true);
       arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
-    } else if (hasOutdoorRoute) {
-      const calibration = getSceneCalibration();
-
-      renderARRoute(
-        scene,
-        graph,
-        latestOutdoorPath,
-        latestAnchor.position,
-        {
-          scale: calibration.arScale,
-          camera,
-          cameraRelative: calibration.mode === 'camera-debug',
-          originOffset: {
-            x: calibration.arOffsetX,
-            y: calibration.arOffsetY,
-            z: calibration.arOffsetZ
-          }
-        }
-      );
     }
+    // Outdoor legs use the GPS tracking panel; skip the legacy floating route discs in AR.
 
     session.addEventListener('end', () => {
       isARSessionRunning = false;
@@ -937,6 +1013,7 @@ async function createARButton() {
     button.textContent = 'Start AR';
   }
 });
+  content.appendChild(createSceneMirrorButton('scene-mirror-button'));
   content.appendChild(button);
   container.appendChild(header);
   container.appendChild(content);
@@ -991,6 +1068,8 @@ function createLayerToggles() {
   createCheckbox('show-per22-indoor-layer', 'PER22 interior objects', isPer22IndoorLayerVisible, setPer22IndoorLayerVisible);
   createCheckbox('show-per17-indoor-layer', 'PER17 interior objects', isPer17IndoorLayerVisible, setPer17IndoorLayerVisible);
 
+  content.appendChild(createSceneMirrorButton());
+
   container.appendChild(header);
   container.appendChild(content);
   document.getElementById('ui').appendChild(container);
@@ -1031,18 +1110,35 @@ function setupStaticInfoPanel() {
 }
 
 function enterARViewMode() {
-  // Hide only the large white ground plane
   if (ground) {
     ground.visible = false;
   }
 
-  // Remove non-transparent desktop background/fog during AR
   scene.background = null;
   scene.fog = null;
+
+  arHiddenMeshes.length = 0;
+
+  indoorMarkerMeshes.forEach((mesh) => {
+    if (mesh.visible) {
+      arHiddenMeshes.push(mesh);
+      mesh.visible = false;
+    }
+  });
+
+  [mainRoad, mensaPer17Road, ...pedestrianPathMeshes].forEach((mesh) => {
+    if (mesh?.visible) {
+      arHiddenMeshes.push(mesh);
+      mesh.visible = false;
+    }
+  });
+
+  setIndoorRouteVisible(false);
+  setRouteVisible(false);
+  clearARRoute(scene);
 }
 
 function exitARViewMode() {
-  // Restore normal desktop view
   if (ground) {
     ground.visible = true;
   }
@@ -1050,13 +1146,30 @@ function exitARViewMode() {
   scene.background = new THREE.Color(0xf7f7f4);
   scene.fog = new THREE.Fog(0xf7f7f4, 360, 620);
 
+  arHiddenMeshes.forEach((mesh) => {
+    mesh.visible = true;
+  });
+  arHiddenMeshes.length = 0;
+
+  setIndoorLayerVisible(isIndoorLayerVisible);
+  setPer22IndoorLayerVisible(isPer22IndoorLayerVisible);
+  setPer17IndoorLayerVisible(isPer17IndoorLayerVisible);
+  setBuildingLayerVisible(areBuildingsVisible);
+  setRouteLayerVisible(areRoutesVisible);
+  syncLabelLayerVisibility();
   clearARRoute(scene);
 }
 
 setupStaticInfoPanel();
-createUIVisibilityToggle();
 createLayerToggles();
-createCalibrationPanel({ anchors });
+createCalibrationPanel({
+  anchors,
+  onApply: () => {
+    updateMirrorButtons();
+    refreshIndoorARRouteForMirror();
+  },
+  onMirrorToggle: handleSceneMirrorToggle
+});
 outdoorTrackingPanel = createOutdoorTrackingPanel({
   scene,
   graph,

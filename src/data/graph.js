@@ -70,7 +70,7 @@ export const graph = {
       FRONT_ROAD_Z,
       'Front road at side entrance 1'
     ),
-    PATH_PER21_FRONT_A: { x: 95, z: 28, label: "Walkway toward Bd de Pérolles crossing", type: "path" },
+    PATH_PER21_FRONT_A: { x: 115, z: 25, label: "Walkway toward Bd de Pérolles crossing", type: "path" },
 
     CROSSING_BD_PEROLLES: { x: 115, z: 25, label: "Crossing over Bd de Pérolles", type: "crossing" },
     PATH_MENSA_FRONT: {
@@ -155,7 +155,8 @@ export const graph = {
     ["PATH_PER21_FRONT_MAIN", "PATH_PER21_FRONT_S1"],
     ["PER21_SIDE_ENTRANCE_1", "PATH_PER21_FRONT_S1"],
     ["PER21_SIDE_ENTRANCE", "PATH_PER21_FRONT_S1"],
-    ["PATH_PER21_FRONT_S1", "PATH_PER21_FRONT_A"],
+    ["PATH_PER21_FRONT_S1", "PATH_PER21_AROUND_EAST_FRONT"],
+    ["PATH_PER21_AROUND_EAST_FRONT", "PATH_PER21_FRONT_A"],
     ["PATH_PER21_FRONT_A", "CROSSING_BD_PEROLLES"],
     ["CROSSING_BD_PEROLLES", "PATH_MENSA_FRONT"],
     ["PATH_MENSA_FRONT", "MENSA_ENTRANCE"],

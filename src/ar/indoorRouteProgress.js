@@ -78,7 +78,7 @@ function getRouteHeading(routePointEntries) {
   return Math.atan2(dx, dz);
 }
 
-export function indoorPathToRoutePoints(indoorGraph, pathNodeIds = [], anchorPosition) {
+export function indoorPathToRoutePoints(indoorGraph, pathNodeIds = [], anchorPosition, arOptions = null) {
   return pathNodeIds
     .map((nodeId) => {
       const node = indoorGraph.nodes[nodeId];
@@ -87,7 +87,11 @@ export function indoorPathToRoutePoints(indoorGraph, pathNodeIds = [], anchorPos
         return null;
       }
 
-      const relative = convertMapPointToAnchorRelative(node, anchorPosition);
+      const relative = convertMapPointToAnchorRelative(
+        node,
+        anchorPosition,
+        arOptions ? { arSpace: true, ...arOptions } : undefined
+      );
       const floor = node.floor || 0;
 
       return {
@@ -396,7 +400,8 @@ export function prepareIndoorARRoute(scene, routeConfig, callbacks = {}) {
   const routePointEntries = indoorPathToRoutePoints(
     routeConfig.graph,
     routeConfig.pathNodeIds,
-    routeConfig.anchorPosition
+    routeConfig.anchorPosition,
+    routeConfig.arOptions ?? null
   );
 
   if (routePointEntries.length < 2) {

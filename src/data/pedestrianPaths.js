@@ -45,7 +45,7 @@ export const pedestrianPaths = [
       { x: per21Side2Entrance.x, z: FRONT_ROAD_Z },
       { x: per21MainEntrance.x, z: FRONT_ROAD_Z },
       { x: per21Side1Entrance.x, z: FRONT_ROAD_Z },
-      { x: 95, z: 28 },
+      { x: PER21_EAST_X, z: FRONT_ROAD_Z },
       { x: 115, z: 25 },
       { x: mensaEntrance.x, z: mensaEntrance.z }
     ]
