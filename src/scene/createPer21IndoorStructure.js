@@ -3,6 +3,8 @@ import {
   PER21_SIDE_ENTRANCE_CORES,
   PER21_BACK_CLASSROOM_Z,
   PER21_LAYOUT_SIZES,
+  PER21_MAIN_HALL_X,
+  PER21_MAIN_STAIRS_Z,
   per21CubicFirstFloorRooms,
   per21ClassroomFirstFloorRooms,
   per21FirstFloorCorridorGaps,
@@ -112,24 +114,37 @@ function createVerticalShaft(x, z, id, name, color, width = 2.2) {
 }
 
 function createSideVerticalCores() {
-  return PER21_SIDE_ENTRANCE_CORES.flatMap((core) => ([
-    createVerticalShaft(
-      core.localX,
-      FRONT_Z + 1,
-      `PER21_ELEVATOR_${core.entranceId}_SHAFT`,
-      `PER21 elevator (${core.label}) — ground level at side entrance`,
-      0xffb74d,
-      2.3
-    ),
-    createVerticalShaft(
-      core.localX + 2.5,
-      FRONT_Z + 1,
-      `PER21_STAIRS_${core.entranceId}_SHAFT`,
-      `PER21 stairs (${core.label}) — ground level at side entrance`,
-      0xff9800,
-      2.3
-    )
-  ]));
+  return PER21_SIDE_ENTRANCE_CORES
+    .filter((core) => core.entranceId !== 'PER21_MAIN_ENTRANCE')
+    .flatMap((core) => ([
+      createVerticalShaft(
+        core.localX,
+        FRONT_Z + 1,
+        `PER21_ELEVATOR_${core.entranceId}_SHAFT`,
+        `PER21 elevator (${core.label}) — ground level at side entrance`,
+        0xffb74d,
+        2.3
+      ),
+      createVerticalShaft(
+        core.localX + 2.5,
+        FRONT_Z + 1,
+        `PER21_STAIRS_${core.entranceId}_SHAFT`,
+        `PER21 stairs (${core.label}) — ground level at side entrance`,
+        0xff9800,
+        2.3
+      )
+    ]));
+}
+
+function createMainEntranceStairShaft() {
+  return createVerticalShaft(
+    PER21_MAIN_HALL_X + 2.5,
+    PER21_MAIN_STAIRS_Z,
+    'PER21_STAIRS_PER21_MAIN_ENTRANCE_SHAFT',
+    'PER21 main entrance stairs — 15 m inside from facade',
+    0xff9800,
+    2.3
+  );
 }
 
 function defaultRoomSize(kind) {
@@ -332,6 +347,7 @@ export function createPer21IndoorStructure(scene) {
     ),
 
     ...createSideVerticalCores(),
+    createMainEntranceStairShaft(),
 
     createIndoorBox(
       { x: 66, z: CLASSROOM_Z },

@@ -6,6 +6,7 @@ import {
   PER21_MAIN_HALL_X,
   PER21_MAIN_HALL_SPINE_LENGTH,
   PER21_MAIN_HALL_TURN_OFFSET,
+  PER21_MAIN_STAIRS_Z,
   per21CorridorStops
 } from './per21Layout.js';
 import {
@@ -78,6 +79,10 @@ function mainHallLeftTurnId(floor) {
 
 function mainHallRightTurnId(floor) {
   return `PER21_MAIN_HALL_RIGHT_F${floor}`;
+}
+
+function mainHallStairsLandId(floor) {
+  return `PER21_MAIN_HALL_STAIRS_LAND_F${floor}`;
 }
 
 function centerSpineId(floor, x) {
@@ -195,6 +200,14 @@ function createMainHallNodes() {
         'corridor'
       ),
       node(
+        mainHallStairsLandId(floor),
+        PER21_MAIN_HALL_X,
+        PER21_MAIN_STAIRS_Z,
+        floor,
+        `Main hall stairs landing floor ${floor + 1}`,
+        'corridor'
+      ),
+      node(
         mainHallLeftTurnId(floor),
         MAIN_HALL_LEFT_X,
         MAIN_HALL_CENTER_Z,
@@ -221,22 +234,29 @@ function createMainHallEdges() {
   const bSpineX = corridorStopX('B_ROOMS');
   const edges = [
     ['PER21_MAIN_ENTRANCE', 'PER21_MAIN_HALL_APPROACH'],
-    ['PER21_MAIN_HALL_APPROACH', mainHallCenterId(0)]
+    ['PER21_MAIN_HALL_APPROACH', mainHallCenterId(0)],
+    ['PER21_MAIN_HALL_APPROACH', mainHallStairsLandId(0)]
   ];
 
   floors.forEach((floor) => {
     const centerId = mainHallCenterId(floor);
     const leftId = mainHallLeftTurnId(floor);
     const rightId = mainHallRightTurnId(floor);
+    const stairsLandId = mainHallStairsLandId(floor);
 
     edges.push(
       [centerId, leftId],
       [leftId, centerSpineId(floor, nearestAnchor(centerSpineAnchors, cSpineX))],
-      [centerId, rightId],
-      [rightId, `${mainStairs}_F${floor}`],
-      [`${mainStairs}_F${floor}`, rightId],
-      [rightId, centerSpineId(floor, nearestAnchor(centerSpineAnchors, bSpineX))]
+      [stairsLandId, `${mainStairs}_F${floor}`],
+      [`${mainStairs}_F${floor}`, stairsLandId]
     );
+
+    if (floor > 0) {
+      edges.push(
+        [stairsLandId, rightId],
+        [rightId, centerSpineId(floor, nearestAnchor(centerSpineSegments.abWing, bSpineX))]
+      );
+    }
 
     if (PER21_CLASSROOM_ROW_FLOORS.includes(floor)) {
       const rowSegments = buildClassroomRowSegments(floor);
@@ -245,11 +265,24 @@ function createMainHallEdges() {
         [centerSpineId(floor, nearestAnchor(centerSpineSegments.cWing, cSpineX)),
           rowSpineId(floor, nearestAnchor(rowSegments.cWing, cSpineX))],
         [centerSpineId(floor, nearestAnchor(centerSpineSegments.abWing, bSpineX)),
-          rowSpineId(floor, nearestAnchor(rowSegments.abWing, bSpineX))],
-        [rightId, rowSpineId(floor, nearestAnchor(rowSegments.abWing, bSpineX))]
+          rowSpineId(floor, nearestAnchor(rowSegments.abWing, bSpineX))]
       );
+
+      if (floor > 0) {
+        edges.push([
+          rightId,
+          rowSpineId(floor, nearestAnchor(rowSegments.abWing, bSpineX))
+        ]);
+      }
     }
   });
+
+  for (let floor = 0; floor < MAX_FLOOR; floor += 1) {
+    edges.push(
+      [`${mainStairs}_F${floor}`, `${mainStairs}_F${floor + 1}`],
+      [`${mainStairs}_F${floor + 1}`, mainHallStairsLandId(floor + 1)]
+    );
+  }
 
   return edges;
 }
@@ -335,8 +368,11 @@ function createStairCubeEdges() {
 
 function createVerticalNodes() {
   const floors = Array.from({ length: MAX_FLOOR + 1 }, (_, floor) => floor);
+  const sideCores = PER21_SIDE_ENTRANCE_CORES.filter(
+    (core) => core.entranceId !== 'PER21_MAIN_ENTRANCE'
+  );
 
-  return PER21_SIDE_ENTRANCE_CORES.flatMap((core) => (
+  const sideNodes = sideCores.flatMap((core) => (
     floors.flatMap((floor) => [
       node(
         `PER21_ELEVATOR_${core.entranceId}_F${floor}`,
@@ -356,32 +392,45 @@ function createVerticalNodes() {
       )
     ])
   ));
+
+  const mainStairNodes = floors.flatMap((floor) => [
+    node(
+      `PER21_STAIRS_PER21_MAIN_ENTRANCE_F${floor}`,
+      PER21_MAIN_HALL_X + 2.5,
+      PER21_MAIN_STAIRS_Z,
+      floor,
+      `Main entrance stairs floor ${floor + 1}`,
+      'stairs'
+    )
+  ]);
+
+  return [...sideNodes, ...mainStairNodes];
 }
 
 function createVerticalEdges() {
   const floors = Array.from({ length: MAX_FLOOR + 1 }, (_, floor) => floor);
+  const sideCores = PER21_SIDE_ENTRANCE_CORES.filter(
+    (core) => core.entranceId !== 'PER21_MAIN_ENTRANCE'
+  );
 
-  return PER21_SIDE_ENTRANCE_CORES.flatMap((core) => {
+  const sideEdges = sideCores.flatMap((core) => {
     const elevator = `PER21_ELEVATOR_${core.entranceId}`;
     const stairs = `PER21_STAIRS_${core.entranceId}`;
     const spineAnchor = nearestAnchor(centerSpineAnchors, core.localX);
-    const usesMainHallRouting = core.entranceId === 'PER21_MAIN_ENTRANCE';
 
-    const floorLinks = usesMainHallRouting
-      ? []
-      : floors.flatMap((floor) => {
-        const spineNode = centerSpineId(floor, spineAnchor);
-        const rowLinks = PER21_CLASSROOM_ROW_FLOORS.includes(floor)
-          ? [[spineNode, rowSpineId(floor, nearestAnchor(buildClassroomRowAnchors(floor), core.localX))]]
-          : [];
+    const floorLinks = floors.flatMap((floor) => {
+      const spineNode = centerSpineId(floor, spineAnchor);
+      const rowLinks = PER21_CLASSROOM_ROW_FLOORS.includes(floor)
+        ? [[spineNode, rowSpineId(floor, nearestAnchor(buildClassroomRowAnchors(floor), core.localX))]]
+        : [];
 
-        return [
-          [spineNode, `${elevator}_F${floor}`],
-          [spineNode, `${stairs}_F${floor}`],
-          [`${elevator}_F${floor}`, `${stairs}_F${floor}`],
-          ...rowLinks
-        ];
-      });
+      return [
+        [spineNode, `${elevator}_F${floor}`],
+        [spineNode, `${stairs}_F${floor}`],
+        [`${elevator}_F${floor}`, `${stairs}_F${floor}`],
+        ...rowLinks
+      ];
+    });
 
     const verticalLinks = floors.slice(0, -1).flatMap((floor) => ([
       [`${elevator}_F${floor}`, `${elevator}_F${floor + 1}`],
@@ -389,15 +438,17 @@ function createVerticalEdges() {
       [centerSpineId(floor, spineAnchor), centerSpineId(floor + 1, spineAnchor)]
     ]));
 
-    const entranceLink = usesMainHallRouting
-      ? [[core.entranceId, 'PER21_MAIN_HALL_APPROACH']]
-      : [
-        [core.entranceId, `${stairs}_F0`],
-        [core.entranceId, `${elevator}_F0`]
-      ];
+    const entranceLink = [
+      [core.entranceId, `${stairs}_F0`],
+      [core.entranceId, `${elevator}_F0`]
+    ];
 
     return [...floorLinks, ...verticalLinks, ...entranceLink];
   });
+
+  const mainEntranceLink = [['PER21_MAIN_ENTRANCE', 'PER21_MAIN_HALL_APPROACH']];
+
+  return [...sideEdges, ...mainEntranceLink];
 }
 
 function createEntranceToSpineEdges() {

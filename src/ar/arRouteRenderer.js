@@ -84,7 +84,7 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
   const scale = options.scale ?? 0.05;
   const camera = options.camera ?? null;
   const cameraRelative = options.cameraRelative ?? false;
-  const originOffset = options.originOffset ?? { x: 0, y: -0.45, z: -1.5 };
+  const originOffset = options.originOffset ?? { x: 0, y: 0, z: -1.5 };
 
   const arMirrorX = options.arMirrorX ?? -1;
 
