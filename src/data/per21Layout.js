@@ -1,5 +1,5 @@
 // PER21 classroom row + side-entrance vertical cores (local x, metres).
-// Uniform cube / classroom / corridor sizes packed A-side (x=132) → H-side (x=-10).
+// Uniform cube / classroom / corridor sizes packed A-side (x=132) → G-side (left).
 
 const BUILDING_A_EDGE = 132;
 const H_SIDE_OVERFLOW = 10;
@@ -20,7 +20,6 @@ function round1(value) {
 }
 
 function solveUniformSizes() {
-  // Row: 8 cubes + 5 classrooms + 2 corridor gaps (same width as classrooms).
   const cubeCount = 8;
   const classCount = 5;
   const corridorCount = 2;
@@ -46,16 +45,79 @@ function placeRowSegments(sizes) {
     corridor: corridorLength
   };
 
+  // A-side → G-side (right to left on map). Ground = floor 0, this row = floor 1.
   const segments = [
-    { roomId: 'A140', letter: 'A', kind: 'cube', lengthKey: 'cube' },
-    { roomId: 'A_B_CORRIDOR', kind: 'corridor-gap', lengthKey: 'corridor' },
-    ...WING_LETTERS.flatMap((letter) => ([
-      { roomId: `${letter}140`, letter, kind: 'cube', lengthKey: 'cube' },
-      { roomId: `${letter}130`, letter, kind: 'classroom', lengthKey: 'class' }
-    ])),
-    { roomId: 'G140', letter: 'G', kind: 'cube', lengthKey: 'cube' },
-    { roomId: 'G_H_CORRIDOR', kind: 'corridor-gap', lengthKey: 'corridor' },
-    { roomId: 'H130', letter: 'H', kind: 'cube', lengthKey: 'cube' }
+    {
+      roomId: 'A120',
+      letter: 'A',
+      kind: 'cube',
+      lengthKey: 'cube',
+      notes: 'Stairs leading to 2nd floor'
+    },
+    {
+      roomId: 'A_ENTRANCE_CORRIDOR',
+      kind: 'corridor-gap',
+      lengthKey: 'corridor',
+      notes: 'Square space — stairs leading to ground floor'
+    },
+    {
+      roomId: 'A140',
+      letter: 'A',
+      kind: 'cube',
+      lengthKey: 'cube'
+    },
+    { roomId: 'B130', letter: 'B', kind: 'classroom', lengthKey: 'class' },
+    {
+      roomId: 'C120',
+      letter: 'C',
+      kind: 'cube',
+      lengthKey: 'cube'
+    },
+    { roomId: 'C130', letter: 'C', kind: 'classroom', lengthKey: 'class' },
+    {
+      roomId: 'C140',
+      letter: 'C',
+      kind: 'cube',
+      lengthKey: 'cube',
+      notes: 'Statue — stairs leading to ground floor (right from ground entrance)'
+    },
+    { roomId: 'D130', letter: 'D', kind: 'classroom', lengthKey: 'class' },
+    {
+      roomId: 'E120',
+      letter: 'E',
+      kind: 'cube',
+      lengthKey: 'cube',
+      notes: 'Stairs leading to 2nd floor'
+    },
+    { roomId: 'E130', letter: 'E', kind: 'classroom', lengthKey: 'class' },
+    {
+      roomId: 'E140',
+      letter: 'E',
+      kind: 'cube',
+      lengthKey: 'cube',
+      notes: 'Stairs leading to ground floor'
+    },
+    { roomId: 'F130', letter: 'F', kind: 'classroom', lengthKey: 'class' },
+    {
+      roomId: 'G120',
+      letter: 'G',
+      kind: 'cube',
+      lengthKey: 'cube',
+      notes: 'Stairs leading to ground floor'
+    },
+    {
+      roomId: 'G_END_CORRIDOR',
+      kind: 'corridor-gap',
+      lengthKey: 'corridor',
+      notes: 'Square space'
+    },
+    {
+      roomId: 'G140',
+      letter: 'G',
+      kind: 'cube',
+      lengthKey: 'cube',
+      notes: 'Stairs leading to 2nd floor'
+    }
   ];
 
   let edge = BUILDING_A_EDGE;
@@ -97,16 +159,22 @@ function roomSizeForKind(kind, sizes, overrides = {}) {
   return { length: sizes.classLength, width: sizes.classWidth, height: 2.4 };
 }
 
+function wingCorridorX(letter, firstFloor) {
+  const rooms = firstFloor.filter((room) => room.letter === letter);
+
+  if (!rooms.length) {
+    return null;
+  }
+
+  const average = rooms.reduce((sum, room) => sum + room.x, 0) / rooms.length;
+  return round1(average);
+}
+
 function buildLayout() {
   const sizes = solveUniformSizes();
   const { placed: firstFloor, leftEdge } = placeRowSegments(sizes);
 
   const byId = Object.fromEntries(firstFloor.map((room) => [room.roomId, room]));
-  const cubicX = Object.fromEntries(
-    firstFloor
-      .filter((room) => room.kind === 'cube' && room.letter)
-      .map((room) => [room.letter, room.x])
-  );
 
   const classroom130X = Object.fromEntries(
     firstFloor
@@ -120,7 +188,7 @@ function buildLayout() {
     {
       roomId: 'A230',
       letter: 'A',
-      x: byId.A_B_CORRIDOR.x,
+      x: byId.A_ENTRANCE_CORRIDOR.x,
       floor: 2,
       kind: 'normal',
       z: PER21_BACK_CLASSROOM_Z,
@@ -141,7 +209,7 @@ function buildLayout() {
     {
       roomId: 'G230',
       letter: 'G',
-      x: byId.G_H_CORRIDOR.x,
+      x: byId.G_END_CORRIDOR.x,
       floor: 2,
       kind: 'normal',
       z: PER21_BACK_CLASSROOM_Z,
@@ -155,7 +223,7 @@ function buildLayout() {
   const frontUpperHalf = round1(sizes.cubeLength / 2);
   const frontUpperQuarter = round1(sizes.cubeLength / 4);
   const frontUpper = ['B', 'F'].flatMap((letter) => {
-    const bayX = cubicX[letter];
+    const bayX = classroom130X[letter];
 
     return [
       {
@@ -187,15 +255,13 @@ function buildLayout() {
     ];
   });
 
+  const corridorStopLetters = ['G', 'F', 'E', 'D', 'C', 'B', 'A'];
   const corridorStops = [
-    { key: 'H_END', x: cubicX.H },
-    { key: 'G_ROOMS', x: cubicX.G },
-    { key: 'F_ROOMS', x: cubicX.F },
-    { key: 'E_ROOMS', x: cubicX.E },
-    { key: 'D_ROOMS', x: cubicX.D },
-    { key: 'C_ROOMS', x: cubicX.C },
-    { key: 'B_ROOMS', x: cubicX.B },
-    { key: 'A_ROOMS', x: cubicX.A }
+    { key: 'H_END', x: round1(leftEdge + sizes.cubeLength / 2) },
+    ...corridorStopLetters.map((letter) => ({
+      key: `${letter}_ROOMS`,
+      x: wingCorridorX(letter, firstFloor)
+    }))
   ];
 
   return {
@@ -203,7 +269,6 @@ function buildLayout() {
     firstFloor,
     upper230,
     frontUpper,
-    cubicX,
     classroom130X,
     corridorGaps,
     corridorStops,
@@ -212,6 +277,23 @@ function buildLayout() {
 }
 
 const layout = buildLayout();
+
+/** Stairs from floor-1 cubes / gaps to ground (0) or 2nd classroom floor (2). */
+export const PER21_STAIR_CUBE_LINKS = [
+  { roomId: 'A120', targetFloor: 2 },
+  { roomId: 'A_ENTRANCE_CORRIDOR', targetFloor: 0 },
+  { roomId: 'C140', targetFloor: 0 },
+  { roomId: 'E120', targetFloor: 2 },
+  { roomId: 'E140', targetFloor: 0 },
+  { roomId: 'G120', targetFloor: 0 },
+  { roomId: 'G140', targetFloor: 2 }
+];
+
+export const per21RoomNotes = Object.fromEntries(
+  layout.firstFloor
+    .filter((room) => room.notes)
+    .map((room) => [room.roomId, room.notes])
+);
 
 /** Front side entrances only (no main / back) — each gets lift + stairs inside the building. */
 export const PER21_SIDE_ENTRANCE_CORES = [
@@ -237,6 +319,6 @@ export const per21FirstFloorCorridorGaps = per21ClassroomNodes.filter((r) => r.f
 export const per21UpperFloorRooms = per21ClassroomNodes.filter((r) => r.floor === 2);
 
 export const per21CorridorGapX = {
-  A_B: layout.corridorGaps.find((gap) => gap.roomId === 'A_B_CORRIDOR').x,
-  G_H: layout.corridorGaps.find((gap) => gap.roomId === 'G_H_CORRIDOR').x
+  A_ENTRANCE: layout.corridorGaps.find((gap) => gap.roomId === 'A_ENTRANCE_CORRIDOR').x,
+  G_END: layout.corridorGaps.find((gap) => gap.roomId === 'G_END_CORRIDOR').x
 };

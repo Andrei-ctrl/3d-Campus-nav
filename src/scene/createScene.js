@@ -3,8 +3,7 @@ import * as THREE from 'three';
 export function createScene() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf7f7f4);
-  scene.fog = new THREE.Fog(0xf7f7f4, 360, 620);
-  
+
   return scene;
 }
 
@@ -279,4 +278,46 @@ export function createOrbitControls(camera, renderer) {
   };
 
   return controls;
+}
+
+export function fitCameraToObjects(camera, controls, objects = []) {
+  const validObjects = objects.filter(Boolean);
+
+  if (!validObjects.length) {
+    return;
+  }
+
+  const box = new THREE.Box3();
+
+  validObjects.forEach((object) => {
+    box.expandByObject(object);
+  });
+
+  if (box.isEmpty()) {
+    return;
+  }
+
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const span = Math.max(size.x, size.z, 80);
+
+  controls._targetX = center.x;
+  controls._targetY = Math.max(0, center.y);
+  controls._targetZ = center.z;
+  controls._radius = THREE.MathUtils.clamp(
+    span * 1.35,
+    controls.minDistance,
+    controls.maxDistance
+  );
+
+  const x = controls._radius * Math.sin(controls._phi) * Math.cos(controls._theta);
+  const y = controls._radius * Math.cos(controls._phi);
+  const z = controls._radius * Math.sin(controls._phi) * Math.sin(controls._theta);
+
+  camera.position.set(
+    controls._targetX + x,
+    controls._targetY + y,
+    controls._targetZ + z
+  );
+  camera.lookAt(controls._targetX, controls._targetY, controls._targetZ);
 }

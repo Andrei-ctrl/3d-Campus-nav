@@ -8,27 +8,37 @@ export function setRouteCalibrationHook(callback) {
   onRouteMeshesChanged = callback;
 }
 
+const ROUTE_Y = 0.15;
+const MIN_SEGMENT_LENGTH = 0.05;
+
 function createRouteSegment(start, end) {
   const dx = end.x - start.x;
   const dz = end.z - start.z;
 
   const length = Math.sqrt(dx * dx + dz * dz);
+
+  if (length < MIN_SEGMENT_LENGTH) {
+    return null;
+  }
+
   const angle = Math.atan2(dz, dx);
 
-  const geometry = new THREE.BoxGeometry(length, 0.18, 3);
+  const geometry = new THREE.BoxGeometry(length, 0.22, 3.2);
   const material = new THREE.MeshBasicMaterial({
-    color: 0x00ff00
+    color: 0x00ff00,
+    depthTest: false
   });
 
   const mesh = new THREE.Mesh(geometry, material);
 
   mesh.position.set(
     (start.x + end.x) / 2,
-    0.125,
+    ROUTE_Y,
     (start.z + end.z) / 2
   );
 
   mesh.rotation.y = -angle;
+  mesh.renderOrder = 12;
 
   mesh.userData = {
     type: 'route',
@@ -75,6 +85,10 @@ export function renderRoute(scene, graph, pathNodeIds) {
     const endNode = graph.nodes[pathNodeIds[i + 1]];
 
     const segment = createRouteSegment(startNode, endNode);
+
+    if (!segment) {
+      continue;
+    }
 
     scene.add(segment);
     currentRouteMeshes.push(segment);

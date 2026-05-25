@@ -15,6 +15,7 @@ const per21Classrooms = [
     roomNumber: room.roomId,
     floor: 1,
     roomType: 'cube',
+    notes: room.notes,
     dimensions: `${formatDimensions(room.size ?? {
       length: PER21_LAYOUT_SIZES.cubeLength,
       width: PER21_LAYOUT_SIZES.cubeWidth
@@ -24,6 +25,7 @@ const per21Classrooms = [
     roomNumber: room.roomId,
     floor: 1,
     roomType: 'classroom',
+    notes: room.notes,
     dimensions: formatDimensions(room.size ?? {
       length: PER21_LAYOUT_SIZES.classLength,
       width: PER21_LAYOUT_SIZES.classWidth
@@ -41,9 +43,10 @@ const per21Classrooms = [
 ];
 
 function createPer21Room(roomConfig) {
-  const { roomNumber, floor, roomType, dimensions } = roomConfig;
+  const { roomNumber, floor, roomType, dimensions, notes } = roomConfig;
   const spokenRoomNumber = roomNumber.replace(/^([A-H])/, '$1 ');
   const typeLabel = roomType === 'cube' ? 'Cubic room' : roomType === 'classroom' ? 'Classroom' : 'Room';
+  const noteText = notes ? `. ${notes}` : '';
 
   return {
     id: `PER21_${roomNumber}`,
@@ -62,7 +65,7 @@ function createPer21Room(roomConfig) {
       `classroom ${roomNumber}`.toLowerCase(),
       `per21 ${roomNumber}`.toLowerCase()
     ],
-    description: `${typeLabel} ${roomNumber} in PER21, floor ${floor}, ${dimensions}`
+    description: `${typeLabel} ${roomNumber} in PER21, floor ${floor}, ${dimensions}${noteText}`
   };
 }
 

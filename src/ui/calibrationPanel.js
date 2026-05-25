@@ -31,7 +31,7 @@ const CONTROL_GROUPS = [
       { key: 'markersScale', label: 'Markers & labels', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
       { key: 'pathsScale', label: 'Roads & paths', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
       { key: 'groundScale', label: 'Ground plane', min: 0.01, sliderMax: 5, step: 0.01, wide: true },
-      { key: 'routesScale', label: 'Route lines', min: 0.01, sliderMax: 5, step: 0.01, wide: true }
+      { key: 'routesScale', label: 'Route lines × paths', min: 0.1, sliderMax: 5, step: 0.01, wide: true }
     ]
   },
   {
@@ -84,7 +84,7 @@ function readCalibrationFromControls(controls, modeSelect, livePreviewCheckbox, 
   return next;
 }
 
-export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle } = {}) {
+export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle, onFitView } = {}) {
   const container = document.createElement('div');
   container.id = 'ar-calibration-panel';
   container.className = 'ar-calibration-panel calibration-panel';
@@ -251,6 +251,15 @@ export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle }
   });
   content.appendChild(flipButton);
 
+  const fitViewButton = document.createElement('button');
+  fitViewButton.type = 'button';
+  fitViewButton.className = 'calibration-fit-view-button';
+  fitViewButton.textContent = 'Fit view to campus';
+  fitViewButton.addEventListener('click', () => {
+    onFitView?.();
+  });
+  content.appendChild(fitViewButton);
+
   const applyButton = document.createElement('button');
   applyButton.textContent = 'Apply calibration';
 
@@ -280,6 +289,7 @@ export function createCalibrationPanel({ anchors = [], onApply, onMirrorToggle }
     syncControlValues(controls, getSceneCalibration());
     flipButton.textContent = `Flip scene ↔ (${getSceneMirrorLabel()})`;
     onApply?.(getSceneCalibration());
+    onFitView?.();
   });
 
   livePreviewCheckbox.addEventListener('change', schedulePreview);

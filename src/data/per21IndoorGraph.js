@@ -1,5 +1,6 @@
 import {
   per21ClassroomNodes,
+  PER21_STAIR_CUBE_LINKS,
   PER21_SIDE_ENTRANCE_CORES,
   PER21_BACK_CLASSROOM_Z,
   per21CorridorStops
@@ -78,14 +79,25 @@ function createCorridorEdges(floor) {
 function createRoomNodes() {
   return per21ClassroomNodes.map((room) => {
     const isCorridorGap = room.kind === 'corridor-gap';
+    const isStairCube = PER21_STAIR_CUBE_LINKS.some((link) => link.roomId === room.roomId);
+    const label = isCorridorGap
+      ? (room.notes || 'Corridor space')
+      : room.notes
+        ? `Room ${room.roomId} — ${room.notes}`
+        : `Room ${room.roomId}`;
+    const type = isStairCube || (isCorridorGap && room.notes?.toLowerCase().includes('stairs'))
+      ? 'stairs'
+      : isCorridorGap
+        ? 'corridor'
+        : 'room';
 
     return node(
       `PER21_${room.roomId}`,
       room.x,
       room.z ?? CLASSROOM_Z,
       room.floor,
-      isCorridorGap ? 'Corridor under G230' : `Room ${room.roomId}`,
-      isCorridorGap ? 'corridor' : 'room'
+      label,
+      type
     );
   });
 }
@@ -97,6 +109,33 @@ function createRoomEdges() {
       corridorNodeId(room.floor, nearestCorridorKey(room.x)),
       `PER21_${room.roomId}`
     ]);
+}
+
+function createCorridorGapEdges() {
+  return per21ClassroomNodes
+    .filter((room) => room.kind === 'corridor-gap')
+    .map((room) => [
+      corridorNodeId(room.floor, nearestCorridorKey(room.x)),
+      `PER21_${room.roomId}`
+    ]);
+}
+
+function createStairCubeEdges() {
+  return PER21_STAIR_CUBE_LINKS.flatMap(({ roomId, targetFloor }) => {
+    const room = per21ClassroomNodes.find((entry) => entry.roomId === roomId);
+
+    if (!room) {
+      return [];
+    }
+
+    const nodeId = `PER21_${roomId}`;
+
+    if (targetFloor === 0) {
+      return [[nodeId, 'PER21_MAIN_CORRIDOR_F0']];
+    }
+
+    return [[nodeId, corridorNodeId(targetFloor, nearestCorridorKey(room.x))]];
+  });
 }
 
 function createVerticalNodes() {
@@ -195,6 +234,8 @@ export const per21IndoorGraph = {
     ['PER21_BACK_ENTRANCE_1', corridorNodeId(0, 'B_ROOMS')],
     ['PER21_BACK_ENTRANCE_2', corridorNodeId(0, 'A_ROOMS')],
     ...createVerticalEdges(),
-    ...createRoomEdges()
+    ...createRoomEdges(),
+    ...createCorridorGapEdges(),
+    ...createStairCubeEdges()
   ]
 };
