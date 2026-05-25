@@ -82,6 +82,8 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
   }
 
   const scale = options.scale ?? 0.05;
+  const routeColor = options.color ?? 0x0077ff;
+  const markerColor = options.markerColor ?? routeColor;
   const camera = options.camera ?? null;
   const cameraRelative = options.cameraRelative ?? false;
   const originOffset = options.originOffset ?? { x: 0, y: 0, z: -1.5 };
@@ -130,7 +132,7 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
       arPoints[i],
       arPoints[i + 1],
       0.07,
-      0x00ff00
+      routeColor
     );
 
     if (segment) {
@@ -141,7 +143,7 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
   arPoints.forEach((point, index) => {
     const marker = createPointMarker(
       point,
-      index === 0 ? 0xffff00 : 0x00ff00
+      index === 0 ? 0xffff00 : markerColor
     );
 
     group.add(marker);

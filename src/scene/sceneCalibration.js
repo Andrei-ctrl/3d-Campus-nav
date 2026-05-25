@@ -1,11 +1,13 @@
 const STORAGE_KEY = 'sceneCalibration';
 const LEGACY_STORAGE_KEY = 'arCalibration';
+const STORAGE_VERSION = 3;
 
 // Map coordinates are metres; globalScale shrinks the whole scene for desktop viewing.
 // arScale applies in AR only (route line and any AR-placed models), independent of globalScale.
 
 export const defaultSceneCalibration = {
-  globalScale: 0.05,
+  version: STORAGE_VERSION,
+  globalScale: 1,
   offsetX: 0,
   offsetY: 0,
   offsetZ: 0,
@@ -92,7 +94,6 @@ function migrateLegacyCalibration(legacy = {}) {
 
   return {
     globalScale: legacy.globalScale ?? undefined,
-    arScale: legacy.scale ?? legacy.arScale ?? undefined,
     offsetX: legacy.x ?? legacy.offsetX ?? undefined,
     offsetY: legacy.y ?? legacy.offsetY ?? undefined,
     offsetZ: legacy.z ?? legacy.offsetZ ?? undefined,
@@ -106,10 +107,13 @@ export function loadSceneCalibration() {
     const legacy = migrateLegacyCalibration(
       JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || '{}')
     );
+    const resetSavedScale = saved.version !== STORAGE_VERSION;
 
     return sanitizeSceneCalibration({
       ...legacy,
-      ...saved
+      ...saved,
+      globalScale: resetSavedScale ? defaultSceneCalibration.globalScale : saved.globalScale,
+      arScale: resetSavedScale ? defaultSceneCalibration.arScale : saved.arScale
     });
   } catch (error) {
     console.warn('Could not load scene calibration:', error);
@@ -126,6 +130,7 @@ export function setSceneCalibration(nextCalibration) {
 }
 
 export function saveSceneCalibration() {
+  sceneCalibration.version = STORAGE_VERSION;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sceneCalibration));
 }
 

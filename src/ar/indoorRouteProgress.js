@@ -304,6 +304,7 @@ export function anchorRouteCameraDebug(routeGroup, camera, routeState, scene) {
 }
 
 let pendingRouteAlign = null;
+const MIN_ALIGN_WAIT_FRAMES = 8;
 
 export function scheduleARRouteAlign(routeState, camera, scene, options = {}) {
   if (!routeState || !camera) {
@@ -326,7 +327,7 @@ export function tickARRouteAlign() {
 
   pendingRouteAlign.frames += 1;
 
-  if (pendingRouteAlign.frames < 3) {
+  if (pendingRouteAlign.frames < MIN_ALIGN_WAIT_FRAMES) {
     return;
   }
 

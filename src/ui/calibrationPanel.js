@@ -67,7 +67,7 @@ export function createCalibrationPanel({ onApply, onMirrorToggle, onFitView } = 
   const help = document.createElement('p');
   help.className = 'calibration-help';
   help.textContent =
-    'Desktop: one scale and offset for the 3D map (default global scale 0.05). AR: separate scale for the route line and any AR models (default AR scale 1 = real metres).';
+    'Desktop: one scale and offset for the 3D map (default global scale 1). AR: separate scale for the route line and any AR models (default AR scale 1 = real metres).';
   content.appendChild(help);
 
   const modeLabel = document.createElement('label');

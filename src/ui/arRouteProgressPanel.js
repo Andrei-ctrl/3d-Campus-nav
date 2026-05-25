@@ -70,8 +70,23 @@ export function createARRouteProgressPanel({
   alignButton.className = 'ar-align-route-button';
   alignButton.textContent = 'Align AR Route';
   alignButton.disabled = true;
+  let routeMode = 'indoor';
 
   const refreshUI = (routeState = getRouteState()) => {
+    if (routeMode === 'outdoor' && !routeState) {
+      title.textContent = 'Outdoor AR Route';
+      alignButton.disabled = true;
+      alignButton.textContent = 'Outdoor route';
+      instructionLine.textContent = 'Follow the blue outdoor AR route.';
+      nextDistanceLine.textContent = 'Distance to next point: —';
+      remainingDistanceLine.textContent = 'Remaining distance: —';
+      nodeLine.textContent = 'Current route node index: —';
+      arrivedLine.textContent = 'Destination reached: false';
+      cameraLine.textContent = 'Camera position: —';
+      return;
+    }
+
+    title.textContent = 'Indoor AR Route';
     const activeSession = isARSessionActive?.() ?? false;
     const canAlign = activeSession && routeState;
 
@@ -124,13 +139,22 @@ export function createARRouteProgressPanel({
   return {
     container,
     refreshUI,
-    setPrepared: (hasRoute) => {
+    setPrepared: (routeStatus) => {
+      routeMode = routeStatus === 'outdoor' ? 'outdoor' : 'indoor';
+      const hasRoute = !!routeStatus;
+
       if (!hasRoute) {
         instructionLine.textContent = 'Show a route before starting AR.';
+        alignButton.disabled = true;
+        alignButton.textContent = 'Align AR Route';
+        title.textContent = 'Indoor AR Route';
+        return;
       }
+
       refreshUI();
     },
     reset: () => {
+      routeMode = 'indoor';
       refreshUI(null);
     }
   };
