@@ -2,7 +2,7 @@
 
 This is my prototype for navigating around the Pérolles campus with a 3D map, outdoor GPS tracking, indoor routing, voice commands, timetable search, and WebXR AR.
 
-The idea is simple: the user chooses where they are and where they want to go, for example a classroom or a course. The app calculates a route on the campus map. Outside, it can follow the user with GPS. Inside, the route can be shown in AR after the user aligns it at an entrance.
+The basic idea is simple: the user chooses where they are and where they want to go, for example a classroom, a building, or a course. The app calculates a route on the campus map. Outside, it can follow the user with GPS. Inside, the route can be shown in AR after the user aligns it at a known entrance.
 
 **Live deployment:**  
 https://andrei-ctrl.github.io/3d-Campus-nav/
@@ -24,7 +24,7 @@ The project combines several parts:
 - GPS progress tracking outside
 - AR route progress inside buildings
 - voice and text commands
-- timetable-based search for courses
+- timetable-based course search
 - room labels and route visualization
 
 The main buildings used in the project are:
@@ -34,25 +34,28 @@ The main buildings used in the project are:
 - PER17
 - Mensa
 
-The app is built with **Three.js**, **Vite**, **WebXR**, browser **Geolocation API**, and **SheetJS/xlsx** for the timetable file.
+The app is built with **Three.js**, **Vite**, **WebXR**, the browser **Geolocation API**, the browser **Web Speech API**, and **SheetJS/xlsx** for reading the timetable file.
 
 ---
 
 ## Main navigation idea
 
-There are two different navigation modes.
+There are two different navigation modes: outside navigation and inside navigation.
 
 ### Outside
 
 Outside, the app uses GPS.
 
-The phone gives latitude and longitude. The app converts this into local campus coordinates and compares the user position with the next point of the outdoor route.
+The phone gives latitude and longitude. The app converts this position into local campus coordinates and compares the user position with the next point of the outdoor route.
 
-So outside the logic is:
+```text
+GPS position
+→ campus X/Z coordinates
+→ compare with next outdoor route node
+→ update progress
+```
 
-
-GPS position that converts to campus X/Z coordinates, compares with next outdoor route node and updates progress.
-
+GPS is useful outside, but it is not precise enough for indoor classroom navigation.
 
 ### Inside
 
@@ -60,13 +63,14 @@ Inside, GPS is not reliable, so the app uses WebXR camera movement.
 
 The user stands at a known entrance, points the phone in the corridor direction, and taps **Align AR Route**. Then the green route is fixed in the AR world. When the user walks in reality, WebXR updates the camera position automatically.
 
-So inside the logic is:
+```text
+WebXR camera position
+→ compare with next indoor route node
+→ update instruction
+→ advance along the route
+```
 
-
-WebXR camera position that compares with next indoor route node, updates instruction, advances along the route.
-
-
-The camera is not moved manually. The phone movement moves it through WebXR.
+The camera is not moved manually by the code. The phone movement moves it through WebXR.
 
 ---
 
@@ -74,33 +78,40 @@ The camera is not moved manually. The phone movement moves it through WebXR.
 
 The project uses graph-based routing.
 
-Each building, entrance, corridor, classroom, stair, or important point can be a node. The connections between them are graph edges. The app uses Dijkstra to find the shortest path.
+Each building, entrance, corridor, classroom, stair, elevator, or important point can be a graph node. The connections between them are graph edges. The app uses Dijkstra's algorithm to find the shortest path.
 
 The route planner can combine:
 
-- indoor graph
 - outdoor graph
+- indoor graph
 - indoor bridge between PER21 and PER22
 - entrance nodes
 - classroom nodes
+- timetable room destinations
+
+Route colors:
+
+- **Blue** = outdoor route
+- **Green** = indoor route
 
 ---
 
 ## Voice and text commands
 
-The user can either select a destination manually, type a command, or use the voice button.
+The user can select a destination manually, type a command, or use the voice button.
 
-Examples:
+Example commands:
 
 ```text
 Take me to G230
 Go to Auditorium Joseph Deiss
-Class name
+Go to room 010
+Go to PER17
 ```
 
 The command parser is rule-based. It normalizes the text and tries to match rooms, buildings, course names, and aliases.
 
-Even though there is an `llm` folder in the project, the current command parsing is not using a large language model because the project turned to be more time consuming than I expected. However in the future I would suggest adding LLM agent to parse newly uploaded files with timetables, map them with existing nodes and graphs, and for better voice recognition commands. 
+Even though there is an `llm` folder in the project, the current command parsing does not use a large language model. The project became more time-consuming than expected, so I focused on deterministic matching first. In the future, I would suggest adding an LLM agent to help parse newly uploaded timetable files, map them to existing nodes and graphs, and improve natural voice command understanding.
 
 ---
 
@@ -203,7 +214,7 @@ Align position is available also in debug mode from the menu on top.
 - GPS tracking outside
 - blue user marker
 - distance and accuracy display
-- automatic handoff message when the user reaches an entrance
+- automatic handoff message when the user reaches an entrance in debug mode
 
 ### AR
 
@@ -303,7 +314,6 @@ src/
     ├── calibrationPanel.js
     └── widgets.js
 ```
-
 ---
 
 ## Important technical notes
