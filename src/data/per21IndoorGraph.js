@@ -3,12 +3,28 @@ import {
   PER21_STAIR_CUBE_LINKS,
   PER21_SIDE_ENTRANCE_CORES,
   PER21_BACK_CLASSROOM_Z,
+  PER21_MAIN_HALL_X,
+  PER21_MAIN_HALL_SPINE_LENGTH,
+  PER21_MAIN_HALL_TURN_OFFSET,
   per21CorridorStops
 } from './per21Layout.js';
+import {
+  PER21_CLASSROOM_ROW_FLOORS,
+  PER21_SPINE_FLOORS,
+  PER21_SPINE_Z,
+  buildCenterSpineAnchors,
+  buildCenterSpineSegments,
+  buildClassroomRowAnchors,
+  buildClassroomRowSegments,
+  chainEdges,
+  nearestAnchor,
+  roomApproachId,
+  spineNodeId
+} from './per21SpineLayout.js';
 
 const PER21_CENTER_X = 10;
 const PER21_MEASURED_LENGTH = 132;
-const PER21_CENTER_Z = 56;
+const PER21_CENTER_Z = PER21_SPINE_Z.center;
 const PER21_HALF_WIDTH = 19;
 
 const FRONT_Z = PER21_CENTER_Z - PER21_HALF_WIDTH;
@@ -18,7 +34,13 @@ const CLASSROOM_Z = PER21_BACK_CLASSROOM_Z;
 const INSIDE_Z = CORE_Z - 2;
 const MAX_FLOOR = 4;
 
-const corridorStops = per21CorridorStops;
+const MAIN_HALL_CENTER_Z = FRONT_Z + PER21_MAIN_HALL_SPINE_LENGTH;
+const MAIN_HALL_APPROACH_Z = FRONT_Z + PER21_MAIN_HALL_SPINE_LENGTH / 2;
+const MAIN_HALL_LEFT_X = PER21_MAIN_HALL_X - PER21_MAIN_HALL_TURN_OFFSET;
+const MAIN_HALL_RIGHT_X = PER21_MAIN_HALL_X + PER21_MAIN_HALL_TURN_OFFSET;
+
+const centerSpineAnchors = buildCenterSpineAnchors();
+const centerSpineSegments = buildCenterSpineSegments();
 
 const publicNodes = [
   { id: 'PER21_CAFETERIA', x: 87, z: CORE_Z, floor: 0 },
@@ -46,34 +68,203 @@ function node(id, x, z, floor, label, type = 'indoor') {
   };
 }
 
-function corridorNodeId(floor, key) {
-  return `PER21_CORRIDOR_F${floor}_${key}`;
+function mainHallCenterId(floor) {
+  return `PER21_MAIN_HALL_CENTER_F${floor}`;
 }
 
-function nearestCorridorKey(x) {
-  return corridorStops.reduce((nearest, stop) => (
-    Math.abs(x - stop.x) < Math.abs(x - nearest.x) ? stop : nearest
-  )).key;
+function mainHallLeftTurnId(floor) {
+  return `PER21_MAIN_HALL_LEFT_F${floor}`;
 }
 
-function createCorridorNodes(floor) {
-  return corridorStops.map((stop) => (
-    node(
-      corridorNodeId(floor, stop.key),
-      stop.x,
-      PER21_CENTER_Z,
-      floor,
-      `PER21 corridor floor ${floor + 1}`,
-      'corridor'
-    )
+function mainHallRightTurnId(floor) {
+  return `PER21_MAIN_HALL_RIGHT_F${floor}`;
+}
+
+function centerSpineId(floor, x) {
+  return spineNodeId('C', floor, x);
+}
+
+function rowSpineId(floor, x) {
+  return spineNodeId('R', floor, x);
+}
+
+function corridorStopX(key) {
+  return per21CorridorStops.find((stop) => stop.key === key)?.x ?? PER21_MAIN_HALL_X;
+}
+
+function getRoomWingLetter(roomId) {
+  return roomId?.match(/^([A-G])/)?.[1] ?? null;
+}
+
+function approachZForRoom(room) {
+  if (room.z === PER21_SPINE_Z.frontUpper) {
+    return PER21_SPINE_Z.frontUpper;
+  }
+
+  return PER21_SPINE_Z.classroomRow;
+}
+
+function createCenterSpineNodes(floor) {
+  return centerSpineAnchors.map((x) => node(
+    centerSpineId(floor, x),
+    x,
+    PER21_CENTER_Z,
+    floor,
+    `Corridor spine floor ${floor + 1}`,
+    'corridor'
   ));
 }
 
-function createCorridorEdges(floor) {
-  return corridorStops.slice(0, -1).map((stop, index) => [
-    corridorNodeId(floor, stop.key),
-    corridorNodeId(floor, corridorStops[index + 1].key)
+function createClassroomRowSpineNodes(floor) {
+  return buildClassroomRowAnchors(floor).map((x) => node(
+    rowSpineId(floor, x),
+    x,
+    PER21_SPINE_Z.classroomRow,
+    floor,
+    `Classroom row spine floor ${floor + 1}`,
+    'corridor'
+  ));
+}
+
+function createCenterSpineEdges(floor) {
+  return [
+    ...chainEdges(centerSpineSegments.cWing.map((x) => centerSpineId(floor, x))),
+    ...chainEdges(centerSpineSegments.abWing.map((x) => centerSpineId(floor, x)))
+  ];
+}
+
+function createClassroomRowSpineEdges(floor) {
+  const segments = buildClassroomRowSegments(floor);
+
+  return [
+    ...chainEdges(segments.cWing.map((x) => rowSpineId(floor, x))),
+    ...chainEdges(segments.abWing.map((x) => rowSpineId(floor, x)))
+  ];
+}
+
+function createWingVerticalSpineEdges() {
+  const wingLinks = [
+    { key: 'C_ROOMS', anchors: centerSpineSegments.cWing },
+    { key: 'B_ROOMS', anchors: centerSpineSegments.abWing }
+  ];
+  const edges = [];
+
+  for (let floor = 0; floor < MAX_FLOOR; floor += 1) {
+    wingLinks.forEach(({ key, anchors }) => {
+      const x = corridorStopX(key);
+      const anchor = nearestAnchor(anchors, x);
+
+      edges.push([
+        centerSpineId(floor, anchor),
+        centerSpineId(floor + 1, anchor)
+      ]);
+    });
+  }
+
+  return edges;
+}
+
+function createCenterToRowLinks(floor) {
+  const rowAnchors = buildClassroomRowAnchors(floor);
+
+  return rowAnchors.map((x) => [
+    centerSpineId(floor, nearestAnchor(centerSpineAnchors, x)),
+    rowSpineId(floor, x)
   ]);
+}
+
+function createMainHallNodes() {
+  const floors = Array.from({ length: MAX_FLOOR + 1 }, (_, floor) => floor);
+
+  return [
+    node(
+      'PER21_MAIN_HALL_APPROACH',
+      PER21_MAIN_HALL_X,
+      MAIN_HALL_APPROACH_Z,
+      0,
+      'Main hall — walk straight from entrance',
+      'corridor'
+    ),
+    ...floors.flatMap((floor) => ([
+      node(
+        mainHallCenterId(floor),
+        PER21_MAIN_HALL_X,
+        MAIN_HALL_CENTER_Z,
+        floor,
+        `Main hall center floor ${floor + 1}`,
+        'corridor'
+      ),
+      node(
+        mainHallLeftTurnId(floor),
+        MAIN_HALL_LEFT_X,
+        MAIN_HALL_CENTER_Z,
+        floor,
+        `Main hall left turn floor ${floor + 1} (C wing)`,
+        'corridor'
+      ),
+      node(
+        mainHallRightTurnId(floor),
+        MAIN_HALL_RIGHT_X,
+        MAIN_HALL_CENTER_Z,
+        floor,
+        `Main hall right turn floor ${floor + 1} (A/B wing)`,
+        'corridor'
+      )
+    ]))
+  ];
+}
+
+function createMainHallEdges() {
+  const floors = Array.from({ length: MAX_FLOOR + 1 }, (_, floor) => floor);
+  const mainStairs = 'PER21_STAIRS_PER21_MAIN_ENTRANCE';
+  const cSpineX = corridorStopX('C_ROOMS');
+  const bSpineX = corridorStopX('B_ROOMS');
+  const edges = [
+    ['PER21_MAIN_ENTRANCE', 'PER21_MAIN_HALL_APPROACH'],
+    ['PER21_MAIN_HALL_APPROACH', mainHallCenterId(0)]
+  ];
+
+  floors.forEach((floor) => {
+    const centerId = mainHallCenterId(floor);
+    const leftId = mainHallLeftTurnId(floor);
+    const rightId = mainHallRightTurnId(floor);
+
+    edges.push(
+      [centerId, leftId],
+      [leftId, centerSpineId(floor, nearestAnchor(centerSpineAnchors, cSpineX))],
+      [centerId, rightId],
+      [rightId, `${mainStairs}_F${floor}`],
+      [`${mainStairs}_F${floor}`, rightId],
+      [rightId, centerSpineId(floor, nearestAnchor(centerSpineAnchors, bSpineX))]
+    );
+
+    if (PER21_CLASSROOM_ROW_FLOORS.includes(floor)) {
+      const rowSegments = buildClassroomRowSegments(floor);
+
+      edges.push(
+        [centerSpineId(floor, nearestAnchor(centerSpineSegments.cWing, cSpineX)),
+          rowSpineId(floor, nearestAnchor(rowSegments.cWing, cSpineX))],
+        [centerSpineId(floor, nearestAnchor(centerSpineSegments.abWing, bSpineX)),
+          rowSpineId(floor, nearestAnchor(rowSegments.abWing, bSpineX))],
+        [rightId, rowSpineId(floor, nearestAnchor(rowSegments.abWing, bSpineX))]
+      );
+    }
+  });
+
+  return edges;
+}
+
+function createRoomApproachNodes() {
+  return per21ClassroomNodes.map((room) => node(
+    roomApproachId(room.roomId),
+    room.x,
+    approachZForRoom(room),
+    room.floor,
+    room.kind === 'corridor-gap'
+      ? `Corridor turn at ${room.roomId}`
+      : `Corridor turn outside ${room.roomId}`,
+    'corridor'
+  ));
 }
 
 function createRoomNodes() {
@@ -102,22 +293,26 @@ function createRoomNodes() {
   });
 }
 
-function createRoomEdges() {
-  return per21ClassroomNodes
-    .filter((room) => room.kind !== 'corridor-gap')
-    .map((room) => [
-      corridorNodeId(room.floor, nearestCorridorKey(room.x)),
-      `PER21_${room.roomId}`
-    ]);
-}
+function createRoomLocalEdges() {
+  return per21ClassroomNodes.flatMap((room) => {
+    const roomNodeId = `PER21_${room.roomId}`;
+    const approachId = roomApproachId(room.roomId);
+    const edges = [[approachId, roomNodeId]];
 
-function createCorridorGapEdges() {
-  return per21ClassroomNodes
-    .filter((room) => room.kind === 'corridor-gap')
-    .map((room) => [
-      corridorNodeId(room.floor, nearestCorridorKey(room.x)),
-      `PER21_${room.roomId}`
-    ]);
+    if (PER21_CLASSROOM_ROW_FLOORS.includes(room.floor)) {
+      edges.unshift([
+        rowSpineId(room.floor, room.x),
+        approachId
+      ]);
+    } else if (room.floor === 0) {
+      edges.unshift([
+        centerSpineId(0, nearestAnchor(centerSpineAnchors, room.x)),
+        approachId
+      ]);
+    }
+
+    return edges;
+  });
 }
 
 function createStairCubeEdges() {
@@ -131,10 +326,10 @@ function createStairCubeEdges() {
     const nodeId = `PER21_${roomId}`;
 
     if (targetFloor === 0) {
-      return [[nodeId, 'PER21_MAIN_CORRIDOR_F0']];
+      return [[nodeId, centerSpineId(0, nearestAnchor(centerSpineAnchors, room.x))]];
     }
 
-    return [[nodeId, corridorNodeId(targetFloor, nearestCorridorKey(room.x))]];
+    return [[nodeId, roomApproachId(roomId)]];
   });
 }
 
@@ -148,7 +343,7 @@ function createVerticalNodes() {
         core.localX,
         INSIDE_Z,
         floor,
-        `Elevator (${core.label}) floor ${floor + 1} — vertical circulation`,
+        `Elevator (${core.label}) floor ${floor + 1}`,
         'elevator'
       ),
       node(
@@ -156,7 +351,7 @@ function createVerticalNodes() {
         core.localX + 2.5,
         INSIDE_Z,
         floor,
-        `Stairs (${core.label}) floor ${floor + 1} — vertical circulation`,
+        `Stairs (${core.label}) floor ${floor + 1}`,
         'stairs'
       )
     ])
@@ -169,29 +364,69 @@ function createVerticalEdges() {
   return PER21_SIDE_ENTRANCE_CORES.flatMap((core) => {
     const elevator = `PER21_ELEVATOR_${core.entranceId}`;
     const stairs = `PER21_STAIRS_${core.entranceId}`;
-    const corridorKey = nearestCorridorKey(core.localX);
+    const spineAnchor = nearestAnchor(centerSpineAnchors, core.localX);
+    const usesMainHallRouting = core.entranceId === 'PER21_MAIN_ENTRANCE';
 
-    const floorLinks = floors.flatMap((floor) => ([
-      [corridorNodeId(floor, corridorKey), `${elevator}_F${floor}`],
-      [corridorNodeId(floor, corridorKey), `${stairs}_F${floor}`],
-      [`${elevator}_F${floor}`, `${stairs}_F${floor}`]
-    ]));
+    const floorLinks = usesMainHallRouting
+      ? []
+      : floors.flatMap((floor) => {
+        const spineNode = centerSpineId(floor, spineAnchor);
+        const rowLinks = PER21_CLASSROOM_ROW_FLOORS.includes(floor)
+          ? [[spineNode, rowSpineId(floor, nearestAnchor(buildClassroomRowAnchors(floor), core.localX))]]
+          : [];
+
+        return [
+          [spineNode, `${elevator}_F${floor}`],
+          [spineNode, `${stairs}_F${floor}`],
+          [`${elevator}_F${floor}`, `${stairs}_F${floor}`],
+          ...rowLinks
+        ];
+      });
 
     const verticalLinks = floors.slice(0, -1).flatMap((floor) => ([
       [`${elevator}_F${floor}`, `${elevator}_F${floor + 1}`],
-      [`${stairs}_F${floor}`, `${stairs}_F${floor + 1}`]
+      [`${stairs}_F${floor}`, `${stairs}_F${floor + 1}`],
+      [centerSpineId(floor, spineAnchor), centerSpineId(floor + 1, spineAnchor)]
     ]));
 
-    const entranceLink = [
-      [core.entranceId, `${stairs}_F0`],
-      [core.entranceId, `${elevator}_F0`]
-    ];
+    const entranceLink = usesMainHallRouting
+      ? [[core.entranceId, 'PER21_MAIN_HALL_APPROACH']]
+      : [
+        [core.entranceId, `${stairs}_F0`],
+        [core.entranceId, `${elevator}_F0`]
+      ];
 
     return [...floorLinks, ...verticalLinks, ...entranceLink];
   });
 }
 
-const corridorFloors = [0, 1, 2, 3, 4];
+function createEntranceToSpineEdges() {
+  const edges = [
+    ['PER21_BACK_ENTRANCE', centerSpineId(0, nearestAnchor(centerSpineAnchors, 61))],
+    ['PER21_BACK_ENTRANCE_1', centerSpineId(0, nearestAnchor(centerSpineAnchors, 97))],
+    ['PER21_BACK_ENTRANCE_2', centerSpineId(0, nearestAnchor(centerSpineAnchors, 123))]
+  ];
+
+  PER21_SIDE_ENTRANCE_CORES.forEach((core) => {
+    if (core.entranceId === 'PER21_MAIN_ENTRANCE') {
+      return;
+    }
+
+    edges.push([
+      core.entranceId,
+      centerSpineId(0, nearestAnchor(centerSpineAnchors, core.localX))
+    ]);
+  });
+
+  return edges;
+}
+
+function createPublicPlaceEdges() {
+  return publicNodes.map((place) => [
+    centerSpineId(0, nearestAnchor(centerSpineAnchors, place.x)),
+    place.id
+  ]);
+}
 
 const entranceNodes = PER21_SIDE_ENTRANCE_CORES.map((core) => (
   node(core.entranceId, core.localX, FRONT_Z, 0, `PER21 ${core.label}`, 'entrance')
@@ -199,8 +434,6 @@ const entranceNodes = PER21_SIDE_ENTRANCE_CORES.map((core) => (
 
 const nodes = [
   ...entranceNodes,
-  node('PER21_PER22_CONNECTION_ENTRANCE', 3, FRONT_Z, 0, 'PER21 PER22 connection (indoor)', 'entrance'),
-  node('PER21_MAIN_ENTRANCE', 110, FRONT_Z, 0, 'PER21 Main Entrance', 'entrance'),
   node('PER21_BACK_ENTRANCE', 61, BACK_Z, 0, 'PER21 Back Entrance', 'entrance'),
   node('PER21_BACK_ENTRANCE_1', 97, BACK_Z, 0, 'PER21 Back Entrance 1', 'entrance'),
   node('PER21_BACK_ENTRANCE_2', 123, BACK_Z, 0, 'PER21 Back Entrance 2', 'entrance'),
@@ -212,9 +445,11 @@ const nodes = [
     place.id.replace('PER21_', '').replaceAll('_', ' '),
     'corridor'
   )),
-  node('PER21_MAIN_CORRIDOR_F0', 66, PER21_CENTER_Z, 0, 'PER21 ground corridor', 'corridor'),
-  ...corridorFloors.flatMap(createCorridorNodes),
+  ...createMainHallNodes(),
+  ...PER21_SPINE_FLOORS.flatMap(createCenterSpineNodes),
+  ...PER21_CLASSROOM_ROW_FLOORS.flatMap(createClassroomRowSpineNodes),
   ...createVerticalNodes(),
+  ...createRoomApproachNodes(),
   ...createRoomNodes()
 ];
 
@@ -222,20 +457,17 @@ export const per21IndoorGraph = {
   nodes: Object.fromEntries(nodes.map((entry) => [entry.id, entry.value])),
 
   edges: [
-    ...corridorFloors.flatMap(createCorridorEdges),
-    ['PER21_MAIN_CORRIDOR_F0', corridorNodeId(0, 'H_END')],
-    ...publicNodes.map((place) => [
-      corridorNodeId(0, nearestCorridorKey(place.x)),
-      place.id
-    ]),
-    ['PER21_PER22_CONNECTION_ENTRANCE', corridorNodeId(0, 'H_END')],
-    ['PER21_MAIN_ENTRANCE', corridorNodeId(0, 'F_ROOMS')],
-    ['PER21_BACK_ENTRANCE', corridorNodeId(0, 'C_ROOMS')],
-    ['PER21_BACK_ENTRANCE_1', corridorNodeId(0, 'B_ROOMS')],
-    ['PER21_BACK_ENTRANCE_2', corridorNodeId(0, 'A_ROOMS')],
+    ...PER21_SPINE_FLOORS.flatMap(createCenterSpineEdges),
+    ...createWingVerticalSpineEdges(),
+    ...PER21_CLASSROOM_ROW_FLOORS.flatMap(createClassroomRowSpineEdges),
+    ...PER21_CLASSROOM_ROW_FLOORS.flatMap(createCenterToRowLinks),
+    ...createMainHallEdges(),
+    ...createEntranceToSpineEdges(),
+    ...createPublicPlaceEdges(),
     ...createVerticalEdges(),
-    ...createRoomEdges(),
-    ...createCorridorGapEdges(),
+    ...createRoomLocalEdges(),
     ...createStairCubeEdges()
   ]
 };
+
+export { centerSpineAnchors, buildClassroomRowAnchors };

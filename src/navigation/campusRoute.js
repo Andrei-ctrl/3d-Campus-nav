@@ -1,6 +1,7 @@
 import { graph } from '../data/graph.js';
 import { findShortestPath } from './dijkstra.js';
 import { calculateRouteDistance } from './routeRenderer.js';
+import { getEntranceBuildingId } from '../data/per21EntranceRouting.js';
 
 const INDOOR_BUILDING_BRIDGES = [
   {
@@ -108,6 +109,56 @@ function planIndoorBridgeRoute(fromDestination, toDestination, indoorGraphs) {
   };
 }
 
+function planIndoorFromEntranceToRoom(fromEntranceId, toDestination, indoorGraphs) {
+  const buildingId = toDestination.room?.buildingId;
+
+  if (!buildingId) {
+    return {
+      ok: false,
+      error: 'Destination room is missing building information.'
+    };
+  }
+
+  const indoorGraph = indoorGraphs[buildingId];
+
+  if (!indoorGraph) {
+    return {
+      ok: false,
+      error: `Indoor graph not available for ${buildingId}.`
+    };
+  }
+
+  const indoorPath = findShortestPath(
+    indoorGraph,
+    fromEntranceId,
+    toDestination.room.indoorNodeId
+  );
+
+  if (!indoorPath.length) {
+    return {
+      ok: false,
+      error: `No indoor path from ${fromEntranceId} to ${toDestination.room.name}.`
+    };
+  }
+
+  const distance = calculateIndoorRouteDistance(indoorGraph, indoorPath);
+
+  return {
+    ok: true,
+    mode: 'indoor',
+    outdoorPath: [],
+    outdoorDistance: 0,
+    indoorSegments: [{
+      buildingId,
+      graph: indoorGraph,
+      path: indoorPath
+    }],
+    indoorPath,
+    distance,
+    note: ''
+  };
+}
+
 export function planCrossBuildingRoute(fromDestination, toDestination, indoorGraphs) {
   if (!fromDestination || !toDestination) {
     return {
@@ -127,6 +178,17 @@ export function planCrossBuildingRoute(fromDestination, toDestination, indoorGra
       ok: false,
       error: 'Missing entrance for route planning.'
     };
+  }
+
+  const fromBuildingId = fromIsRoom
+    ? fromDestination.room?.buildingId
+    : getEntranceBuildingId(fromEntranceId);
+  const toBuildingId = toIsRoom
+    ? toDestination.room?.buildingId
+    : getEntranceBuildingId(toEntranceId);
+
+  if (!fromIsRoom && toIsRoom && fromBuildingId && fromBuildingId === toBuildingId) {
+    return planIndoorFromEntranceToRoom(fromEntranceId, toDestination, indoorGraphs);
   }
 
   if (fromIsRoom && toIsRoom) {
