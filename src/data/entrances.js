@@ -96,7 +96,7 @@ export const entrances = [
     buildingId: "MENSA",
     name: "Mensa Entrance",
     description: "Entrance of Mensa Perolles",
-    position: { x: 145, y: 0, z: 40 },
+    position: { x: 145, y: 0, z: 30 },
     isDefault: true
   },
   {
@@ -104,7 +104,7 @@ export const entrances = [
     buildingId: "MENSA",
     name: "Mensa Side Entrance",
     description: "Side entrance of Mensa Perolles",
-    position: { x: 160, y: 0, z: -8 },
+    position: { x: 160, y: 0, z: -18 },
     isDefault: true
   },
   {

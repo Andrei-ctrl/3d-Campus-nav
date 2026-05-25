@@ -48,6 +48,36 @@ function createPointMarker(point, color) {
   return sphere;
 }
 
+function getCameraHeading(camera) {
+  const direction = new THREE.Vector3();
+  camera.getWorldDirection(direction);
+  direction.y = 0;
+
+  if (direction.lengthSq() < 0.0001) {
+    return 0;
+  }
+
+  direction.normalize();
+  return Math.atan2(direction.x, direction.z);
+}
+
+function getRouteHeading(points) {
+  if (points.length < 2) {
+    return 0;
+  }
+
+  const start = points[0];
+  const next = points[1];
+  const dx = next.x - start.x;
+  const dz = next.z - start.z;
+
+  if (Math.abs(dx) < 0.001 && Math.abs(dz) < 0.001) {
+    return 0;
+  }
+
+  return Math.atan2(dx, dz);
+}
+
 export function clearARRoute(scene) {
   if (!currentARRouteGroup) return;
 
@@ -86,6 +116,7 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
   const markerColor = options.markerColor ?? routeColor;
   const camera = options.camera ?? null;
   const cameraRelative = options.cameraRelative ?? false;
+  const alignToCamera = options.alignToCamera ?? false;
   const originOffset = options.originOffset ?? { x: 0, y: 0, z: -1.5 };
 
   const arMirrorX = options.arMirrorX ?? -1;
@@ -155,6 +186,13 @@ export function renderARRoute(scene, graph, pathNodeIds, anchorPosition, options
     if (!scene.children.includes(camera)) {
       scene.add(camera);
     }
+  } else if (alignToCamera && camera) {
+    const cameraWorldPosition = new THREE.Vector3();
+    camera.getWorldPosition(cameraWorldPosition);
+
+    group.position.set(cameraWorldPosition.x, 0, cameraWorldPosition.z);
+    group.rotation.set(0, getCameraHeading(camera) - getRouteHeading(arPoints), 0);
+    scene.add(group);
   } else {
     scene.add(group);
   }
