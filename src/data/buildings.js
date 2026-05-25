@@ -4,10 +4,29 @@
 // y is height.
 // The campus model has been rotated +15° so that PER21 and PER17 align with the x-axis.
 
-export const FLOOR_HEIGHT = 4;
+export const GROUND_FLOOR_HEIGHT = 4;
+export const UPPER_FLOOR_HEIGHT = 3;
 
 export function buildingHeight(floors) {
-  return floors * FLOOR_HEIGHT;
+  if (floors <= 0) {
+    return 0;
+  }
+
+  return GROUND_FLOOR_HEIGHT + Math.max(0, floors - 1) * UPPER_FLOOR_HEIGHT;
+}
+
+export function floorElevation(floor = 0) {
+  const normalizedFloor = Math.max(0, Number(floor) || 0);
+
+  if (normalizedFloor === 0) {
+    return 0;
+  }
+
+  return GROUND_FLOOR_HEIGHT + (normalizedFloor - 1) * UPPER_FLOOR_HEIGHT;
+}
+
+export function floorDistance(startFloor = 0, endFloor = 0) {
+  return floorElevation(endFloor) - floorElevation(startFloor);
 }
 
 export const buildings = [

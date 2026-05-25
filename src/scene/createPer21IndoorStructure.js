@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FLOOR_HEIGHT, buildingHeight } from '../data/buildings.js';
+import { buildingHeight, floorElevation } from '../data/buildings.js';
 import {
   PER21_SIDE_ENTRANCE_CORES,
   PER21_BACK_CLASSROOM_Z,
@@ -25,14 +25,14 @@ const PUBLIC_Z = 70;
 const CLASSROOM_Z = PER21_BACK_CLASSROOM_Z;
 const PER21_FLOOR_COUNT = 5;
 const INDOOR_BASE_Y = buildingHeight(PER21_FLOOR_COUNT) + 1;
-const VERTICAL_SHAFT_HEIGHT = 22;
+const VERTICAL_SHAFT_HEIGHT = buildingHeight(PER21_FLOOR_COUNT);
 
 function toWorldX(localX) {
   return PER21_CENTER_X - PER21_MEASURED_LENGTH / 2 + localX;
 }
 
 function floorY(floor = 0, offset = 0.2) {
-  return INDOOR_BASE_Y + floor * FLOOR_HEIGHT + offset;
+  return INDOOR_BASE_Y + floorElevation(floor) + offset;
 }
 
 function applyIndoorUserData(mesh, id, name) {

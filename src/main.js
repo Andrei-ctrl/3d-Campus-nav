@@ -159,7 +159,6 @@ let latestAnchor = null;
 let latestToDestination = null;
 let latestHasIndoorLeg = false;
 let latestIndoorARRoute = null;
-let latestOutdoorARRoute = null;
 let outdoorTrackingPanel = null;
 let arRouteProgressPanel = null;
 let indoorARRouteState = null;
@@ -196,34 +195,14 @@ function prepareIndoorARRouteFromLatest(calibration = getSceneCalibration()) {
     });
   }
 
+  // #region agent log
+  fetch('http://127.0.0.1:7546/ingest/131a3ef0-1571-476a-824c-f9e62e696b4d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ef8ba'},body:JSON.stringify({sessionId:'5ef8ba',hypothesisId:'C',location:'main.js:prepareIndoorARRouteFromLatest',message:'unified AR route prepared',data:{segmentCount:latestIndoorARRoute?.segments?.length,firstNodes:latestIndoorARRoute?.segments?.[0]?.pathNodeIds?.slice(0,4),aligned:!!indoorARRouteState?.aligned},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   arRouteProgressPanel?.setPrepared?.('indoor');
   arRouteProgressPanel?.refreshUI?.(indoorARRouteState);
 
   return !!indoorARRouteState;
-}
-
-function renderOutdoorARRouteFromLatest(calibration = getSceneCalibration()) {
-  if (!latestOutdoorARRoute) {
-    return false;
-  }
-
-  renderARRoute(
-    scene,
-    latestOutdoorARRoute.graph,
-    latestOutdoorARRoute.pathNodeIds,
-    latestOutdoorARRoute.anchorPosition,
-    {
-      scale: calibration.arScale ?? 1,
-      arMirrorX: calibration.arMirrorX ?? -1,
-      camera,
-      alignToCamera: isARSessionRunning,
-      originOffset: { x: 0, y: 0, z: 0 }
-    }
-  );
-
-  arRouteProgressPanel?.setPrepared?.('outdoor');
-  arRouteProgressPanel?.refreshUI?.(null);
-  return true;
 }
 
 function refreshActiveARRoute() {
@@ -239,11 +218,10 @@ function refreshActiveARRoute() {
   }
 
   if (latestIndoorARRoute) {
+    // #region agent log
+    fetch('http://127.0.0.1:7546/ingest/131a3ef0-1571-476a-824c-f9e62e696b4d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ef8ba'},body:JSON.stringify({sessionId:'5ef8ba',hypothesisId:'B',location:'main.js:refreshActiveARRoute',message:'AR unified route branch',data:{segmentCount:latestIndoorARRoute.segments?.length,seg0:latestIndoorARRoute.segments?.[0]?.pathNodeIds?.slice(0,5),seg1:latestIndoorARRoute.segments?.[1]?.pathNodeIds?.slice(0,3)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     return prepareIndoorARRouteFromLatest(calibration);
-  }
-
-  if (latestOutdoorARRoute) {
-    return renderOutdoorARRouteFromLatest(calibration);
   }
 
   arRouteProgressPanel?.setPrepared?.(false);
@@ -295,9 +273,18 @@ function buildIndoorARRouteSegments(routePlan, toDestination = null) {
   const hasOutdoor = outdoor.length >= 2;
 
   if (hasOutdoor) {
+    const sourceIndoor = indoorSegs.find(
+      (segment) => segment.path?.length >= 2 && !isDestinationIndoorSegment(segment, toDestination)
+    ) ?? null;
     const destIndoor = indoorSegs.find(
       (segment) => segment.path?.length >= 2 && isDestinationIndoorSegment(segment, toDestination)
     ) ?? null;
+
+    if (sourceIndoor) {
+      segments.push({ graph: sourceIndoor.graph, pathNodeIds: sourceIndoor.path });
+    }
+
+    segments.push({ graph, pathNodeIds: outdoor });
 
     if (destIndoor) {
       segments.push({ graph: destIndoor.graph, pathNodeIds: destIndoor.path });
@@ -356,33 +343,13 @@ function buildIndoorARRoute(routePlan, toDestination, fromEntranceId = null) {
     buildingId: toDestination?.room?.buildingId ?? toDestination?.id ?? null,
     destinationName,
     anchorPosition,
-    entranceNodeId: firstNodeId
-  };
-}
-
-function buildOutdoorARRoute(routePlan, fromEntranceId = null) {
-  const outdoorPath = routePlan?.outdoorPath ?? [];
-
-  if (outdoorPath.length < 2) {
-    return null;
-  }
-
-  const anchorPosition = getEntrancePosition(fromEntranceId ?? outdoorPath[0])
-    ?? graph.nodes[outdoorPath[0]];
-
-  if (!anchorPosition) {
-    return null;
-  }
-
-  return {
-    graph,
-    pathNodeIds: outdoorPath,
-    anchorPosition
+    entranceNodeId: firstNodeId,
+    hasOutdoorSegment: segments.some((segment) => segment.graph === graph)
   };
 }
 
 function getActiveARAnchorPosition() {
-  return latestIndoorARRoute?.anchorPosition ?? latestOutdoorARRoute?.anchorPosition ?? null;
+  return latestIndoorARRoute?.anchorPosition ?? null;
 }
 
 function clearIndoorARRouteState() {
@@ -397,7 +364,10 @@ function storeLatestRoutePlan(routePlan, toDestination, fromEntranceId = null) {
   latestHasIndoorLeg = (routePlan.indoorPath?.length ?? 0) > 0
     || (routePlan.indoorSegments?.length ?? 0) > 0;
   latestIndoorARRoute = buildIndoorARRoute(routePlan, toDestination, fromEntranceId);
-  latestOutdoorARRoute = buildOutdoorARRoute(routePlan, fromEntranceId);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7546/ingest/131a3ef0-1571-476a-824c-f9e62e696b4d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ef8ba'},body:JSON.stringify({sessionId:'5ef8ba',hypothesisId:'A',location:'main.js:storeLatestRoutePlan',message:'route plan stored',data:{outdoorPath:latestOutdoorPath,outdoorNodeCount:latestOutdoorPath.length,indoorSegCount:routePlan.indoorSegments?.length??0,arSegmentCount:latestIndoorARRoute?.segments?.length??0,arSeg0:latestIndoorARRoute?.segments?.[0]?.pathNodeIds?.slice(0,6),hasOutdoorSegment:latestIndoorARRoute?.hasOutdoorSegment,destId:toDestination?.id,fromEntranceId},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   if (latestOutdoorPath.length >= 2) {
     outdoorTrackingPanel?.startTracking?.();
@@ -406,9 +376,7 @@ function storeLatestRoutePlan(routePlan, toDestination, fromEntranceId = null) {
   }
 
   outdoorTrackingPanel?.refreshUI?.();
-  arRouteProgressPanel?.setPrepared?.(
-    latestIndoorARRoute ? 'indoor' : latestOutdoorARRoute ? 'outdoor' : false
-  );
+  arRouteProgressPanel?.setPrepared?.(!!latestIndoorARRoute);
 }
 
 function clearLatestRoutePlan() {
@@ -417,7 +385,6 @@ function clearLatestRoutePlan() {
   latestToDestination = null;
   latestHasIndoorLeg = false;
   latestIndoorARRoute = null;
-  latestOutdoorARRoute = null;
   latestAnchor = null;
   outdoorTrackingPanel?.stopTracking?.();
   clearIndoorARRouteState();
@@ -909,6 +876,10 @@ function showRouteFromEntrance(fromEntranceId, toDestinationId) {
   );
 
   storeLatestRoutePlan(routePlan, toDestination, fromEntranceId);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7546/ingest/131a3ef0-1571-476a-824c-f9e62e696b4d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ef8ba'},body:JSON.stringify({sessionId:'5ef8ba',hypothesisId:'A',location:'main.js:showRouteFromEntrance',message:'cross-building route planned',data:{fromEntranceId,toId:toDestinationId,outdoorPath:routePlan.outdoorPath,indoorSegCount:routePlan.indoorSegments?.length??0},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 }
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -1152,7 +1123,7 @@ async function createARButton() {
 
   button.addEventListener('click', async () => {
   try {
-    const hasARRoute = !!latestIndoorARRoute || !!latestOutdoorARRoute;
+    const hasARRoute = !!latestIndoorARRoute;
 
     if (!hasARRoute) {
       alert('Please show a route before starting AR.');
