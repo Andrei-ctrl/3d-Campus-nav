@@ -33,6 +33,7 @@ import {
   exitARCalibrationView,
   getSceneCalibration,
   getSceneMirrorLabel,
+  isCalibrationNonDefault,
   registerCalibratedObject,
   registerCalibratedObjects,
   toggleSceneMirrorX,
@@ -79,7 +80,8 @@ import {
   createRenderer,
   createLighting,
   createGround,
-  createOrbitControls
+  createOrbitControls,
+  fitCameraToObjects
 } from './scene/createScene.js';
 
 import { createCampusBuildings } from './scene/createBuildings.js';
@@ -484,6 +486,23 @@ if (ground) {
 
 applySceneCalibration();
 
+function fitCampusView() {
+  fitCameraToObjects(camera, controls, [
+    ...Object.values(buildingMeshes),
+    ground
+  ]);
+}
+
+function fitCampusViewIfNeeded() {
+  if (window.matchMedia('(pointer: coarse)').matches || isCalibrationNonDefault()) {
+    fitCampusView();
+  }
+}
+
+if (isCalibrationNonDefault()) {
+  fitCampusView();
+}
+
 function initializeRouteControls() {
   routeControls = createRouteControls(
     anchors,
@@ -671,6 +690,7 @@ function showRoute(fromDestinationId, toDestinationId) {
 
   if (routePlan.outdoorPath.length > 0) {
     renderRoute(scene, graph, routePlan.outdoorPath);
+    fitCampusViewIfNeeded();
   }
 
   renderIndoorRouteSegments(scene, routePlan.indoorSegments);
@@ -738,6 +758,7 @@ function showRouteFromEntrance(fromEntranceId, toDestinationId) {
 
   if (routePlan.outdoorPath.length > 0) {
     renderRoute(scene, graph, routePlan.outdoorPath);
+    fitCampusViewIfNeeded();
   }
 
   renderIndoorRouteSegments(scene, routePlan.indoorSegments);
@@ -1150,7 +1171,6 @@ function enterARViewMode() {
   }
 
   scene.background = null;
-  scene.fog = null;
 
   arHiddenMeshes.length = 0;
 
@@ -1179,7 +1199,6 @@ function exitARViewMode() {
   }
 
   scene.background = new THREE.Color(0xf7f7f4);
-  scene.fog = new THREE.Fog(0xf7f7f4, 360, 620);
 
   arHiddenMeshes.forEach((mesh) => {
     mesh.visible = true;
@@ -1203,8 +1222,10 @@ createCalibrationPanel({
     updateMirrorButtons();
     refreshIndoorARRouteForMirror();
     refreshActiveRoutesAfterCalibration();
+    fitCampusView();
   },
-  onMirrorToggle: handleSceneMirrorToggle
+  onMirrorToggle: handleSceneMirrorToggle,
+  onFitView: fitCampusView
 });
 outdoorTrackingPanel = createOutdoorTrackingPanel({
   scene,

@@ -159,9 +159,7 @@ function createClassroomVolumes() {
       },
       0x90caf9,
       `PER21_${gap.roomId}_VOLUME`,
-      gap.roomId === 'A_B_CORRIDOR'
-        ? 'PER21 corridor space between A140 and B140'
-        : 'PER21 corridor space under G230',
+      gap.notes || 'PER21 corridor space',
       12.55,
       0.48
     )),
@@ -170,7 +168,9 @@ function createClassroomVolumes() {
       room.size ?? defaultRoomSize('cube'),
       0x0288d1,
       `PER21_${room.roomId}_CUBE_VOLUME`,
-      `PER21 ${room.roomId} cubic room`,
+      room.notes
+        ? `PER21 ${room.roomId} cubic room — ${room.notes}`
+        : `PER21 ${room.roomId} cubic room`,
       15.2,
       0.44
     )),

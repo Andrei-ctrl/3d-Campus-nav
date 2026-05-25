@@ -22,7 +22,8 @@ function createIndoorRouteSegment(start, end, options = {}) {
 
   const geometry = new THREE.BoxGeometry(length, 0.22, 2.2);
   const material = new THREE.MeshBasicMaterial({
-    color: 0x00ff00
+    color: 0x00ff00,
+    depthTest: false
   });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -41,6 +42,7 @@ function createIndoorRouteSegment(start, end, options = {}) {
   );
 
   mesh.rotation.y = -angle;
+  mesh.renderOrder = 12;
 
   mesh.userData = {
     type: 'indoor-route',

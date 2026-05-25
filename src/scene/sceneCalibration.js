@@ -26,6 +26,86 @@ export const defaultSceneCalibration = {
   livePreview: true
 };
 
+const CALIBRATION_LIMITS = {
+  globalScale: { min: 0.05, max: 15 },
+  offsetX: { min: -500, max: 500 },
+  offsetY: { min: -100, max: 100 },
+  offsetZ: { min: -500, max: 500 },
+  pivotX: { min: -500, max: 500 },
+  pivotY: { min: -100, max: 100 },
+  pivotZ: { min: -500, max: 500 },
+  buildingsScale: { min: 0.1, max: 5 },
+  per21IndoorScale: { min: 0.1, max: 5 },
+  per22IndoorScale: { min: 0.1, max: 5 },
+  per17IndoorScale: { min: 0.1, max: 5 },
+  pathsScale: { min: 0.1, max: 5 },
+  markersScale: { min: 0.1, max: 5 },
+  groundScale: { min: 0.1, max: 5 },
+  routesScale: { min: 0.1, max: 5 },
+  arScale: { min: 0.001, max: 2 },
+  arOffsetX: { min: -50, max: 50 },
+  arOffsetY: { min: -50, max: 50 },
+  arOffsetZ: { min: -50, max: 50 }
+};
+
+function clampCalibrationValue(key, value, fallback) {
+  const limits = CALIBRATION_LIMITS[key];
+
+  if (!limits) {
+    return value ?? fallback;
+  }
+
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return Math.min(limits.max, Math.max(limits.min, numeric));
+}
+
+export function sanitizeSceneCalibration(raw = {}) {
+  const merged = {
+    ...defaultSceneCalibration,
+    ...raw
+  };
+
+  Object.keys(defaultSceneCalibration).forEach((key) => {
+    if (key === 'mode' || key === 'livePreview') {
+      return;
+    }
+
+    if (key === 'arMirrorX') {
+      merged.arMirrorX = merged.arMirrorX === 1 ? 1 : -1;
+      return;
+    }
+
+    merged[key] = clampCalibrationValue(
+      key,
+      merged[key],
+      defaultSceneCalibration[key]
+    );
+  });
+
+  if (merged.mode !== 'camera-debug' && merged.mode !== 'anchor-relative') {
+    merged.mode = defaultSceneCalibration.mode;
+  }
+
+  merged.livePreview = merged.livePreview !== false;
+
+  return merged;
+}
+
+export function isCalibrationNonDefault(calibration = sceneCalibration) {
+  return Object.entries(defaultSceneCalibration).some(([key, defaultValue]) => {
+    if (key === 'mode' || key === 'livePreview' || key === 'arMirrorX') {
+      return calibration[key] !== defaultValue;
+    }
+
+    return Math.abs(Number(calibration[key]) - Number(defaultValue)) > 0.001;
+  });
+}
+
 const originalTransforms = new Map();
 const objectGroups = new Map();
 let sceneCalibration = loadSceneCalibration();
@@ -53,11 +133,10 @@ export function loadSceneCalibration() {
       JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || '{}')
     );
 
-    return {
-      ...defaultSceneCalibration,
+    return sanitizeSceneCalibration({
       ...legacy,
       ...saved
-    };
+    });
   } catch (error) {
     console.warn('Could not load scene calibration:', error);
     return { ...defaultSceneCalibration };
@@ -69,10 +148,7 @@ export function getSceneCalibration() {
 }
 
 export function setSceneCalibration(nextCalibration) {
-  sceneCalibration = {
-    ...defaultSceneCalibration,
-    ...nextCalibration
-  };
+  sceneCalibration = sanitizeSceneCalibration(nextCalibration);
 }
 
 export function saveSceneCalibration() {
@@ -143,7 +219,8 @@ function getGroupScale(groupName, calibration) {
     case 'ground':
       return calibration.groundScale;
     case 'routes':
-      return calibration.routesScale;
+      // Keep route lines aligned with roads/paths; routesScale is a multiplier only.
+      return calibration.pathsScale * calibration.routesScale;
     default:
       return 1;
   }
