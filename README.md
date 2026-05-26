@@ -16,7 +16,7 @@ https://andrei-ctrl.github.io/3d-Campus-nav/
 - Video 1: [YOUTUBE_LINK_1](https://youtube.com/shorts/clqkn08DUW0?feature=share)
 - Video 2: [YOUTUBE_LINK_2](https://youtube.com/shorts/59jlYgO7K3I?feature=share)
 - Video 3: [YOUTUBE_LINK_3](https://youtu.be/KfiU_uASB7Q)
-- Video 4: [YOUTUBE_LINK_4](https://youtu.be/hFQCzytQ7Wc) 
+- Video 4: [YOUTUBE_LINK_4](https://youtu.be/hFQCzytQ7Wc)  (in this video I forgot to do the mirror flip that's why to path went wrong way)
 
 ---
 
