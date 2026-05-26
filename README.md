@@ -39,6 +39,15 @@ The app is built with **Three.js**, **Vite**, **WebXR**, the browser **Geolocati
 
 ---
 
+## Measuremnts
+
+The weasurements were taken using Google Maps measuring tool. Positions of rooms as well as other objects positions, I measured using steps under the assumption that one large step is equal to one meter. 
+
+<img width="960" height="1280" alt="image" src="https://github.com/user-attachments/assets/41527070-b457-4c0b-858a-acfde194b886" />
+
+<img width="1792" height="834" alt="image" src="https://github.com/user-attachments/assets/729731c2-261f-4c6b-8600-171939f56fdd" />
+
+
 ## Main navigation idea
 
 There are two different navigation modes: outside navigation and inside navigation.
