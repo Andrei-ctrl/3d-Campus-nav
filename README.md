@@ -8,9 +8,9 @@ The basic idea is simple: the user chooses where they are and where they want to
 
 https://andrei-ctrl.github.io/3d-Campus-nav/
 
-Left mouse hold - rotate
-Right mous hold - drag
-Wheel and +/-  - zoom in/out
+- Left mouse hold - rotate
+- Right mous hold - drag
+- Wheel and +/-  - zoom in/out
 
 **YouTube videos:**  
 - Video 1: [YOUTUBE_LINK_1](https://youtube.com/shorts/clqkn08DUW0?feature=share)
