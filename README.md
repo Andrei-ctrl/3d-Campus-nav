@@ -386,3 +386,7 @@ The most important improvements would be:
 ## License / context
 
 This project was made as an academic prototype for Foundation of Spatial Computing and Applications in AR/VR at the University of Fribourg.
+
+## AI disclosure
+
+I used AI assistant to help me witht some part of implementation. The code was reviewed and refined by me. 
