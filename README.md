@@ -5,7 +5,12 @@ This is my prototype for navigating around the Pérolles campus with a 3D map, o
 The basic idea is simple: the user chooses where they are and where they want to go, for example a classroom, a building, or a course. The app calculates a route on the campus map. Outside, it can follow the user with GPS. Inside, the route can be shown in AR after the user aligns it at a known entrance.
 
 **Live deployment:**  
+
 https://andrei-ctrl.github.io/3d-Campus-nav/
+
+Left mouse hold - rotate
+Right mous hold - drag
+Wheel and +/-  - zoom in/out
 
 **YouTube videos:**  
 - Video 1: [YOUTUBE_LINK_1](https://youtube.com/shorts/clqkn08DUW0?feature=share)
@@ -39,9 +44,9 @@ The app is built with **Three.js**, **Vite**, **WebXR**, the browser **Geolocati
 
 ---
 
-## Measuremnts
+## Measurements
 
-The weasurements were taken using Google Maps measuring tool. Positions of rooms as well as other objects positions, I measured using steps under the assumption that one large step is equal to one meter. 
+The weasurements were taken using Google Maps measuring tool. Positions of rooms as well as other objects positions, I measured using steps under the assumption that one large step is equal to one meter. Although, I could have just measure the distances to the room entrances to put the markers, I wanted the prototype to be more detailed. 
 
 <img width="960" height="1280" alt="image" src="https://github.com/user-attachments/assets/41527070-b457-4c0b-858a-acfde194b886" />
 
